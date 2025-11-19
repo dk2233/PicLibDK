@@ -1,0 +1,56 @@
+
+Daniel Kucharski 2025 
+kucharski22daniel@gmail.com
+
+Led segment control driver written in gpasm
+please use it with care :-)
+
+
+
+
+please define following variables
+
+"leds_common"
+- variable that holds which digit is now on
+
+"led_state"
+- holds status of led controll 
+
+value to be set for each of segment indyvidually
+number of it depeneds of define  LED_SEGMENT 
+put them in byte starting from lowest address and finish on highest address
+"segment_digit1"
+"segment_digit10"
+"segment_digit100"
+"segment_digit1000"
+"segment_digit10000"
+
+LED_SEGMENT shoule be assing number of used digits 
+
+
+
+
+procedures requires to create additional procedure 
+
+translate_value_to_port_pins
+
+this will be call by refresh_led
+in order to set digit output pin
+ the easiest will be something like:
+
+   movf  value_for_one_digit_segment,w
+   movwf port_led
+
+however not always one digit will be connected to full port
+sometimes it is better to use some pins of each of ports available
+led_example.asm shows as an example situation with 4 lower bits attached to port_led_L (portC)
+and  4 higher to PORTB
+
+
+
+to use this library properly call
+led_digit_init  somewhere in the beginning of your program
+
+
+also call refresh_led every couple of ms
+
