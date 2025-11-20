@@ -22,6 +22,17 @@ context_restore16f macro
     swapf w_temp,w
     endm
 
+check_tmr0_isr macro func_to_process_tmr0 
+    LOCAL check_tmr0_isr_exit
+
+    btfss INTCON,TMR0IE
+    goto  check_tmr0_isr_exit
+
+    btfsc INTCON,TMR0IF
+    goto func_to_process_tmr0
+
+check_tmr0_isr_exit
+    endm
 
 check_tmr1_isr macro  func_to_process_tmr1
     LOCAL check_tmr1_isr_exit

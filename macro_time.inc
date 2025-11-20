@@ -5,8 +5,6 @@ configure_tmr0   macro  prescaler_bits , internal_clock
         if (prescaler_bits != 0)
 option_bits = prescaler_bits 
 option_bits = option_bits | (0 << PSA) ; PSA on 
-        else
-        VARIABLE   tmr0_period = tmr0_time
         endif
 
         if (internal_clock == 0)
@@ -22,6 +20,18 @@ option_bits = option_bits | (1 << T0CS)
         endm
 
 
+config_tmr1_as_timer   macro   prescaler_bit, interrupt_on 
+        LOCAL bits = 1 << TMR1ON
+bits = bits | (prescaler_bit << T1CKPS0 )
+        movlw bits 
+        BANKSEL T1CON
+        movwf T1CON
+
+        if (interrupt_on == 1)
+        BANKSEL PIE1
+        bsf PIE1, TMR1IE 
+        endif 
+        endm
 
 configure_tmr2 macro prescaler_bits, postscaler_bits, period_reg
      BANKSEL  T2CON 

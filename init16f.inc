@@ -52,10 +52,15 @@ config_analog_off macro
     endm
 
 config_comparator_off  macro
-        BANKSEL CMCON0
+        IFDEF CMCON0
+        LOCAL cmc_reg_name = CMCON0
+        ELSE 
+        LOCAL cmc_reg_name = CMCON
+        ENDIF 
+        BANKSEL cmc_reg_name
     ;comparator module off
 	movlw	b'00000111'
-	movwf	CMCON0
+	movwf	cmc_reg_name
         endm
 
 config_ccp_off macro 
@@ -122,16 +127,4 @@ bits = bits | (clock_select << SCS)
         endm
 
 
-config_tmr1_as_timer   macro   prescaler_bit, interrupt_on 
-        LOCAL bits = 1 << TMR1ON
-bits = bits | (prescaler_bit << T1CKPS0 )
-        movlw bits 
-        BANKSEL T1CON
-        movwf T1CON
-
-        if (interrupt_on == 1)
-        BANKSEL PIE1
-        bsf PIE1, TMR1IE 
-        endif 
-        endm
   
