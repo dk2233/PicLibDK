@@ -16,6 +16,9 @@ please define following variables
 "led_state"
 - holds status of led controll 
 
+"led_dot_display"
+- set in case of bit for indyvidual segment has to be displayed
+
 value to be set for each of segment indyvidually
 number of it depeneds of define  LED_SEGMENT 
 put them in byte starting from lowest address and finish on highest address

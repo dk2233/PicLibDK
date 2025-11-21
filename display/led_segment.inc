@@ -53,7 +53,7 @@
 ;    g-
 ;  e |_|c
 ;     d
-;                   'gfedcba'
+;                  '.gfedcba'
 _0       equ      b'00111111'
 _1       equ      b'00000110' ; bc;;
 _2       equ      b'01011011';;
@@ -85,7 +85,7 @@ _u      equ       b'00011100'
 
 
 
-        
+led_dot_pin   equ  7
 
 
 tab_cyfr
@@ -158,7 +158,7 @@ x = x - 1
      endm
 
 
-m_led_common_handle  macro  number_of_digits 
+m_led_common_handle_On  macro  number_of_digits 
 
     LOCAL n_digit = number_of_digits , x = number_of_digits, divider = 1
     
@@ -182,7 +182,7 @@ divider = divider / .10;
         ; btfsc    leds_common,led1
         ; bsf      segment_digit1_port,segment_digit1b
          endm
-
+         
 m_led_add_number_to_FSR  macro number_of_digits
 
     LOCAL n_digit = number_of_digits , x = number_of_digits, divider = 1
@@ -211,6 +211,32 @@ divider = divider / .10;
          ;movlw    0        
          endm
 
+;check if for cuirrent digit request to dot display is given
+;if in led_dot_display - led_dot1 is set
+;and currently leds_common, led1 is set
+;means dot has to be set to be displayed
+m_led_check_dot_display  macro  number_of_digits
+    LOCAL n_digit = number_of_digits , x = number_of_digits, divider = 1
+
+    while ( x > 1 )
+divider = divider * .10
+x = x - 1
+    endw
+    BANKSEL led_dot_display
+    while (n_digit > 0)
+
+    btfsc    led_dot_display,light_dot#v(divider)
+    movlw    1 << n_digit-1 ; add n_digit-1
+n_digit = n_digit - 1
+divider = divider / .10;
+
+    endw 
+
+    xorwf   leds_common,w
+    SKPNZ 
+    bsf    value_for_one_digit_segment, led_dot_pin
+
+    endm
 
 common_leds_start_value equ (1 << (LED_SEGMENT-1))
 
@@ -228,8 +254,6 @@ common_leds_start_value equ (1 << (LED_SEGMENT-1))
 refresh_led
          BANKSEL segment_digit1
          BANKISEL segment_digit1
-         ;at first disable all cathode 
-         m_led_common_off LED_SEGMENT
          
          ;change digit to be shown - only one at a time
          bcf      STATUS,C
@@ -278,16 +302,20 @@ refresh_led_not_0
         BANKSEL led_state
          bcf      led_state,previous_0
         
-
          movf     INDF,w   
          PAGESEL  tab_cyfr
          call     tab_cyfr
-
             
 send_to_leds
          BANKSEL  value_for_one_digit_segment
          movwf    value_for_one_digit_segment
+         ;movf value_for_one_digit_segment,w 
+         ;SKPNZ 
+         ;goto send_to_leds_check_disable
 
+        m_led_check_dot_display  LED_SEGMENT
+
+send_to_leds_check_disable
          btfsc    led_state,disable_show
          clrf     value_for_one_digit_segment
 
@@ -296,6 +324,8 @@ send_to_leds
          ;for example = 4 lower bits of LED a,b,c ,d are connected to 0-3 pins of portb
          ;and e,f,g,h are connected to 0-3 pins of port a
          
+         ;disable all cathode 
+         m_led_common_off LED_SEGMENT
          PAGESEL translate_value_to_port_pins
          call     translate_value_to_port_pins
 
@@ -303,7 +333,7 @@ send_to_leds
 zalacz_katody     
          BANKSEL leds_common
 
-         m_led_common_handle LED_SEGMENT
+         m_led_common_handle_On LED_SEGMENT
         clrf             PCLATH         
          return 
          
@@ -311,8 +341,6 @@ zalacz_katody
 ;this procedure will translate          
 ;to number_l and number_h place value to be shown - max 2**16 value
 split_number_to_digits 
-        ;macro_16bits_into_4dec  number_l, segment_digit1 
-
         macro_16bits_into_N_dec number_l, segment_digit1 , LED_SEGMENT
 
         return
