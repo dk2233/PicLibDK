@@ -1,4 +1,13 @@
+;ds18_status
+ds18_init_error    equ     0
+ds18_init_ok       equ     1
+
+
 ;*                                  *************************POLecenie DS1820
+; in this procedure TMR2 is used for DS18B20 driver
+; we need 
+;"ds18_status" - this variable will hold bit state of ds18 information
+
 PIN_HI
         BANKSEL tris_of_ds18b20_port
         BSF     tris_of_ds18b20_port, port_pin_ds18b20           ; high impedance
@@ -18,14 +27,7 @@ send4bit_1
          call     PIN_LO
          nop
          call     PIN_HI
-         ;bcf      port_ds1820,port_pin_ds18b20
-         ;nop
-         ;nop
-         ;nop
-         ;nop
-         ;nop
-         ;nop
-         ;bsf      port_ds1820,port_pin_ds18b20
+
 loop_send4bit1
          btfss    PIR1,TMR2IF        
          goto     loop_send4bit1
@@ -34,7 +36,7 @@ loop_send4bit1
 
 send4bit_0
          ;bsf      port_ds1820,port_pin_ds18b20
-         call     PIport_pin_ds18b20N_LO         
+         call     PIN_LO         
          clrf     TMR2
          nop
          
@@ -50,24 +52,24 @@ loop_send4bit0
 
 
 
-inicjacja_ds1820
+init_ds1820
 ;wysyla 0 na linie danych do ds1820 przez 
 ;inicjalizacja 0 na wyjsciu okolo 480us tzn dla ustawienia 1:2 
 ;        dokladnie 256 z liczeniem TMR2 co 2, pozniej otwarcie portu na wejscie przejscie do 1 i po kilkunastu us otwarcie portu na wejscie
 ;        powinien byc obecny sygnal 0 do okolo 240 us.
 ;otwieram port na wyjscie
-         bcf      RCSTA,CREN
-         bsf      STATUS,RP0
+         BANKSEL   tris_of_ds18b20_port
          bcf      tris_of_ds18b20_port,port_pin_ds18b20
          
 ;ustawiam tmr2 na zliczanie 2 
-         movlw    0xff
+         ;movlw    0xff   ; here we need a value + prescaler\postscaler to give about 480 us impuls         
+         ;movwf    PR2
          
-         movwf    PR2
-         bcf      STATUS,RP0
-         
-         movlw    b'00001100'
-         movwf    T2CON
+         configure_tmr2 0 , 1, .255
+
+         ;movlw    b'00001100'
+         ;movwf    T2CON
+         BANKSEL PIR1
          bcf      PIR1,TMR2IF
 ;wlaczam przerwanie Tmr2
          ;bsf      STATUS,RP0
@@ -77,60 +79,38 @@ inicjacja_ds1820
          call     PIN_LO
 ;daje znacznik ze dotyczy to inicjacji ds1820
          ;bsf      znaczniki_ds,inicjacja
-;petla czekania na koniec inicjacji
-petla_inicjacji1
+;loop to wait until ds18b20 will finish
+loop_wait_for_init
          
          btfss    PIR1,TMR2IF
-         goto     petla_inicjacji1
-;teraz przelaczam sie na odbior danych z ds1820
+         goto     loop_wait_for_init
+;switch to receive data from DS18
          BANKSEL  tris_of_ds18b20_port
          bsf      tris_of_ds18b20_port,port_pin_ds18b20
          nop
          BANKSEL  PIR1
          bcf      PIR1,TMR2IF
-;sprawdzam czy w ciagu 480us pojawilo sie 0 na porcie czujnika
-petla_inicjacji2
+;sprawdzam czy w ciagu 480us pojawilo sie 0 na porcie czujnika 
+loop_wait_for_ds_out
          btfss    port_ds1820,port_pin_ds18b20
          goto     petla_inicjacji3
          btfss    PIR1,TMR2IF
-         goto     petla_inicjacji2
+         goto     loop_wait_for_ds_out
          
-blad_inicjacji_ds
-         call    sprawdz_czy_mozna_wysylac
-         movlw    znak_lf
-         movwf   TXREG
-         call    sprawdz_czy_mozna_wysylac
-         movlw    0x35
-         
-         movwf   TXREG
-         call    sprawdz_czy_mozna_wysylac
-         movlw    znak_lf
-         movwf   TXREG
-         goto     powrot_z_polecen   
 petla_inicjacji3
          btfsc    port_ds1820,port_pin_ds18b20
          goto     inicjacja_ok
          btfss    PIR1,TMR2IF
          goto     petla_inicjacji3
          
+;error of ds18b20 initialization
+        BANKSEL ds18_status
+        bsf ds18_status, ds18_init_error
+        goto powrot_z_polecen
+
 inicjacja_ok
-         btfsc    markers,czy_wysylanie
-         goto     wysylanie_danych_rozkaz
-         
-         call    sprawdz_czy_mozna_wysylac
-         movlw    znak_lf
-         movwf   TXREG
-         call    sprawdz_czy_mozna_wysylac
-         movlw    _O
-         
-         movwf   TXREG
-         call    sprawdz_czy_mozna_wysylac
-         movlw    _K
-         movwf   TXREG
-         call    sprawdz_czy_mozna_wysylac
-         movlw    znak_lf
-         movwf   TXREG
-         call    sprawdz_czy_mozna_wysylac
+        BANKSEL ds18_status
+         bsf ds18_status, ds18_init_ok 
          
          goto     powrot_z_polecen
          
@@ -141,7 +121,7 @@ inicjacja_ok
 
 wysylanie_danych
          bsf      markers,czy_wysylanie
-         goto     inicjacja_ds1820
+         goto     init_ds1820
 wysylanie_danych_rozkaz
          bcf      markers,czy_wysylanie
          bsf      STATUS,RP0
@@ -161,7 +141,25 @@ wysylanie_danych_rozkaz
 ;wlaczam przerwanie Tmr2
          
 wysylanie_bajtu_rozkazu
-;zczytuje dana do wyslania
+;zczytuje dana do wyslani;tzn czy przez czas 8  bitow cos         
+rozkazy_ds1820
+        incf     FSR,f
+        movlw    _i
+        xorwf    INDF,w
+        btfsc    STATUS,Z 
+        goto      init_ds1820
+        
+        movlw    _s
+        xorwf    INDF,w
+        btfsc    STATUS,Z 
+        goto     wysylanie_danych
+        
+        movlw    _b
+        xorwf    INDF,w
+        btfsc    STATUS,Z 
+        goto     ustawienie_liczby_odbieranych_bajtow
+        
+        goto     powrot_z_polecena
         call      kopiuj_liczbe_przeslana
         movf      tmp,w
         movwf     polecenie_wysylane
@@ -290,24 +288,11 @@ ustawienie_liczby_odbieranych_bajtow_zero
          
 ;zarejestrowalem 0
         
-;tzn czy przez czas 8  bitow cos         
-rozkazy_ds1820
-        incf     FSR,f
-        movlw    _i
-        xorwf    INDF,w
-        btfsc    STATUS,Z 
-        goto      inicjacja_ds1820
         
-        movlw    _s
-        xorwf    INDF,w
-        btfsc    STATUS,Z 
-        goto     wysylanie_danych
-        
-        movlw    _b
-        xorwf    INDF,w
-        btfsc    STATUS,Z 
-        goto     ustawienie_liczby_odbieranych_bajtow
-        
-        goto     powrot_z_polecen
-        
+powrot_z_polecen
+;        movlw    _up
+         ;incf     FSR,f
+        ; clrf     FSR
+;        movwf    INDF
+         return
 ;*********KOniec ds1820
