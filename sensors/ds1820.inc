@@ -20,7 +20,7 @@ PIN_LO
         BCF     tris_of_ds18b20_port, port_pin_ds18b20           ; low impedance zero
         RETURN
 
-send4bit_1
+send_bit_1
          BANKSEL TMR2
          clrf     TMR2
          bcf      PIR1,TMR2IF
@@ -28,13 +28,13 @@ send4bit_1
          nop
          call     PIN_HI
 
-loop_send4bit1
+loop_send_bit1
          btfss    PIR1,TMR2IF        
-         goto     loop_send4bit1
+         goto     loop_send_bit1
          
          return
 
-send4bit_0
+send_bit_0
          ;bsf      port_ds1820,port_pin_ds18b20
          call     PIN_LO         
          clrf     TMR2
@@ -43,9 +43,9 @@ send4bit_0
          bcf      PIR1,TMR2IF
          
          bcf      port_ds1820,port_pin_ds18b20
-loop_send4bit0
+loop_send_bit_0
          btfss    PIR1,TMR2IF        
-         goto     loop_send4bit0
+         goto     loop_send_bit_0
          call     PIN_HI
          
          return
@@ -65,7 +65,7 @@ init_ds1820
          ;movlw    0xff   ; here we need a value + prescaler\postscaler to give about 480 us impuls         
          ;movwf    PR2
          
-         configure_tmr2 0 , 1, .255
+         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_480us
 
          ;movlw    b'00001100'
          ;movwf    T2CON
@@ -96,203 +96,127 @@ loop_wait_for_ds_out
          goto     petla_inicjacji3
          btfss    PIR1,TMR2IF
          goto     loop_wait_for_ds_out
+
+         goto   init_ds1820_error
          
 petla_inicjacji3
          btfsc    port_ds1820,port_pin_ds18b20
          goto     inicjacja_ok
          btfss    PIR1,TMR2IF
          goto     petla_inicjacji3
-         
+
+init_ds1820_error 
 ;error of ds18b20 initialization
         BANKSEL ds18_status
         bsf ds18_status, ds18_init_error
-        goto powrot_z_polecen
+        goto init_ds1820_end
 
 inicjacja_ok
         BANKSEL ds18_status
          bsf ds18_status, ds18_init_ok 
-         
-         goto     powrot_z_polecen
-         
+
+init_ds1820_end         
+        return 
          
              
 ;jezeli otrzyma 1 to na ekran wysyla informacje 'ds ok'         
 
 
-wysylanie_danych
-         bsf      markers,czy_wysylanie
-         goto     init_ds1820
-wysylanie_danych_rozkaz
-         bcf      markers,czy_wysylanie
-         bsf      STATUS,RP0
+Pomiary_temperatury
+        bcf     markers,wykonaj_pomiar
         
-;ustawiam tmr2 na 60us bo tyle trwa jeden bit  
-         movlw    0x3c
-         
-         movwf    PR2
-         
-         ;bcf      tris_of_ds18b20_port,port_pin_ds18b20
+        clrf    znak_rozkazu_ds
         
-         bcf      STATUS,RP0
-;zliczanie 1:1         
-         movlw    b'00000100'
-         movwf    T2CON
-         bcf      PIR1,TMR2IF
-;wlaczam przerwanie Tmr2
-         
-wysylanie_bajtu_rozkazu
-;zczytuje dana do wyslani;tzn czy przez czas 8  bitow cos         
-rozkazy_ds1820
-        incf     FSR,f
-        movlw    _i
-        xorwf    INDF,w
-        btfsc    STATUS,Z 
-        goto      init_ds1820
-        
-        movlw    _s
-        xorwf    INDF,w
-        btfsc    STATUS,Z 
-        goto     wysylanie_danych
-        
-        movlw    _b
-        xorwf    INDF,w
-        btfsc    STATUS,Z 
-        goto     ustawienie_liczby_odbieranych_bajtow
-        
-        goto     powrot_z_polecena
-        call      kopiuj_liczbe_przeslana
-        movf      tmp,w
-        movwf     polecenie_wysylane
-        clrf      TMR2
-        movlw     8
-        movwf     n
-petla_send4biting        
-;jezeli 0 to wyslij   0
-        btfss     polecenie_wysylane,0
-        call      send4bit_0
-        btfsc     polecenie_wysylane,0
-        call      send4bit_1
-        bsf       port_ds1820,port_pin_ds18b20
-        bcf       STATUS,C
-        rrf       polecenie_wysylane,f
-        bcf       STATUS,C
-        ;movf      polecenie_wysylane,w
-        ;btfss     STATUS,Z
-        decfsz    n,f
-        goto      petla_send4biting
-        
-;sprawdzam czy kolejny bajt jest 0x0d        
-        incf     FSR,f
-        movf      INDF,w
-        xorlw     0x0d
-        btfsc     STATUS,Z
-        goto     sprawdz_czy_ds1820_wysyla
-        
-        decf      FSR,f
-        goto      wysylanie_bajtu_rozkazu
-        
-        
-sprawdz_czy_ds1820_wysyla
-         movlw    bajt_ds
-         movwf    FSR
-         movf     jak_duzo_bajtow_odbieram_z_ds,w
-         movwf    liczba1
-            
-        ;goto     powrot_z_polecen
-;procedura sprawdza czy ds1820 cos wysyla jezeli tak to sprawdza przez 60 us czy jest choc na chwile 0
-;normalnie jezeli ds1820 nic nie wysyla to jest caly czas 1 bez rzadnych zmian
-petla_odbioru_ds1820
-        movlw     8
-        movwf     n
-        clrf      TMR2
-        clrf      INDF
-        bcf       PIR1,TMR2IF
-        
-petla_czy_jest_0
-         call     PIN_LO
-         nop
-         call     PIN_HI
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         movf     port_ds1820,w
-         movwf    liczba2
-         btfss    liczba2,port_pin_ds18b20
-         bcf      STATUS,C
-         btfsc    liczba2,port_pin_ds18b20
-         bsf      STATUS,C
-         rrf      INDF,f
-         
-czekam_na_kolejny_bit
-        btfss    PIR1,TMR2IF
-        goto      czekam_na_kolejny_bit
-        bcf       PIR1,TMR2IF
-        
-        decfsz    n,f
-        goto      petla_czy_jest_0
-        incf      FSR,f
-;czy juz przeszly wszystkie linie (4 bajty odebrano)  
-        decfsz    liczba1,f
-        goto      petla_odbioru_ds1820
-        
-;jezeli minelo 60us i nic sie nie dzialo to przerwij odbieranie 
-        ;btfsc    PIR1,TMR2IF
-        movf     jak_duzo_bajtow_odbieram_z_ds,w
-        movwf     n
-        movlw    bajt_ds
-        movwf    FSR
-petla_wysylania_odebranych_bajtow        
-        call    sprawdz_czy_mozna_wysylac
-         
-         swapf    INDF,w
-         andlw    0x0f
-         call     zamien_na_hex
-         movwf   TXREG
-         
-         call    sprawdz_czy_mozna_wysylac
-         
-         movf     INDF,w
-         andlw    0x0f
-         call     zamien_na_hex
-         movwf   TXREG     
-         incf     FSR,f
-         decfsz   n,f
-         goto     petla_wysylania_odebranych_bajtow
-         
-         call    sprawdz_czy_mozna_wysylac
-         movlw    znak_lf
-         movwf   TXREG   
-        goto     powrot_z_polecen
-        
-ustawienie_liczby_odbieranych_bajtow
-         
-         incf     FSR,f
-         call     sprawdz_czy_odebrano_litere
-         movf     tmp7,w
-         sublw    0x0b
-         btfss    STATUS,C
-         goto     ustawienie_liczby_odbieranych_bajtow_zero
-         
-         movf     tmp7,w
+         movlw    9
          movwf    jak_duzo_bajtow_odbieram_z_ds
-         goto     powrot_z_polecen
          
-ustawienie_liczby_odbieranych_bajtow_zero
-         movlw    0x04
-         movwf    jak_duzo_bajtow_odbieram_z_ds
-         goto     powrot_z_polecen
+         ; movlw       HIGH rozkaz_pomiaru
+         ; movwf       TBLPTRH
+      
+         ; movlw       LOW rozkaz_pomiaru
+         ; movwf       TBLPTRL
          
-;zarejestrowalem 0
-        
-        
-powrot_z_polecen
-;        movlw    _up
-         ;incf     FSR,f
-        ; clrf     FSR
-;        movwf    INDF
+         bsf         markers_pomiary, wysylam_rozkaz_pomiaru
+         
+         ;najpierw wy�lij rozkaz pomiaru
+         ;wykorzystuje procedury kt�re dzia�aj� po wybraniu wysy�ania danych przez polecenie
+         ;
+         ;        "*D1scc44"
+         
+         ; bcf    markers,czy_rozkaz
+         clrf   znak_rozkazu_ds
+         
+         call     inicjacja_ds1820_1
+         
+         call     petla_wysylania_rozkazu_1
+
+         
+         ;pozniej czekaj 1 s
+         bcf         markers_pomiary, wysylam_rozkaz_pomiaru
+         bsf      markers_pomiary,czekam_na_odczyt_DS1
+         
          return
+     
+
+
+check_CRC_DS 
+         clrf  bajt_CRC
+         ;movlw    
+   
+;tablica danych DS18b20 musi byc w FSR2
+check_CRC_DS_loop
+         movf INDF,w   
+         incf   FSR,f
+         xorwf bajt_CRC,f       
+         movlw 0     
+         
+         btfsc bajt_CRC,0 
+         xorlw 0x5e       
+         
+         btfsc bajt_CRC,1 
+         xorlw 0xbc 
+         
+         btfsc bajt_CRC,2 
+         xorlw 0x61 
+         
+         btfsc bajt_CRC,3 
+         xorlw 0xc2 
+         
+         btfsc bajt_CRC,4 
+         xorlw 0x9d 
+         
+         btfsc bajt_CRC,5 
+         xorlw 0x23 
+         
+         btfsc bajt_CRC,6 
+         xorlw 0x46 
+         
+         btfsc bajt_CRC,7 
+         xorlw 0x8c 
+         
+         movwf bajt_CRC   
+         
+         decfsz n,f 
+         goto check_CRC_DS_loop         
+                     
+
+         ;movwf bajt_CRC         
+ 
+
+         return         
+
+rozkaz_pomiaru         
+        movf     znak_rozkazu_ds,w
+         addwf    PCL,f         
+         dt   0xcc,0x44,0x00
+
+rozkaz_odbioru
+        movf     znak_rozkazu_ds,w
+         addwf    PCL,f
+         dt   0xcc,0xbe,0x00
+         
+rozkac_id
+        movf     znak_rozkazu_ds,w
+         addwf    PCL,f
+         dt       0x33,0x00
 ;*********KOniec ds1820
