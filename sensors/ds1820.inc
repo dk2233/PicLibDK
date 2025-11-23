@@ -91,11 +91,11 @@ loop_wait_for_init
          BANKSEL  PIR1
          bcf      PIR1,TMR2IF
 ;sprawdzam czy w ciagu 480us pojawilo sie 0 na porcie czujnika 
-loop_wait_for_ds_out
+init_ds1820_loop_wait_for_ds_out
          btfss    port_ds1820,port_pin_ds18b20
          goto     petla_inicjacji3
          btfss    PIR1,TMR2IF
-         goto     loop_wait_for_ds_out
+         goto     init_ds1820_loop_wait_for_ds_out
 
          goto   init_ds1820_error
          
@@ -119,7 +119,6 @@ init_ds1820_end
         return 
          
              
-;jezeli otrzyma 1 to na ekran wysyla informacje 'ds ok'         
 
 
 Pomiary_temperatury
@@ -146,7 +145,7 @@ Pomiary_temperatury
          ; bcf    markers,czy_rozkaz
          clrf   znak_rozkazu_ds
          
-         call     inicjacja_ds1820_1
+         call     init_ds1820
          
          call     petla_wysylania_rozkazu_1
 
@@ -157,7 +156,192 @@ Pomiary_temperatury
          
          return
      
+;DS18B20
+petla_wysylania_rozkazu_1
 
+
+        btfsc    markers_pomiary, wysylam_rozkaz_pomiaru
+        movlw HIGH rozkaz_pomiaru
+        
+        
+        btfsc    markers_pomiary, wysylam_rozkaz_odbioru
+        movlw HIGH rozkaz_odbioru
+        
+        movwf    PCLATH
+        
+        btfsc    markers_pomiary, wysylam_rozkaz_pomiaru
+         call     rozkaz_pomiaru
+ 
+        btfsc    markers_pomiary, wysylam_rozkaz_odbioru
+        call rozkaz_odbioru
+        
+         clrf     PCLATH
+         ;movwf        TABLAT,w
+	 movwf     polecenie_wysylane
+         xorlw     0
+         btfsc    STATUS,Z
+         return             
+          
+         incf   znak_rozkazu_ds,f
+         
+         
+         ;jezeli 0 to skocz do wyswietlania slowa z linii 2
+         
+         
+         movlw     czas_oczekiwania_60us      
+         ;ustawiam TMR2 na odbieranie
+         
+         banksel  PR2
+         movwf    PR2
+         banksel  T2CON
+;ustawiam 60us         
+         movlw    t2con_dla_60us
+         movwf    T2CON
+         bcf      PIR1,TMR2IF
+         clrf      TMR2
+         movlw     8
+         movwf     n
+         
+petla_sending_pomiar_1
+
+        btfss     polecenie_wysylane,0
+        call      send_zero_1
+        btfsc     polecenie_wysylane,0
+        call      send_one_1
+        bsf       port_ds1820,czujnik_ds1820_1
+        
+        bcf       STATUS,C
+        rrf       polecenie_wysylane,f
+        
+        decfsz    n,f
+        goto      petla_sending_pomiar_1
+         
+        goto       petla_wysylania_rozkazu_1
+ 
+
+odbierz_pomiary_temp
+
+       bcf  markers_pomiary,odczytaj_pomiar_DS1
+       bcf  markers_pomiary,czekam_na_odczyt_DS1
+       bcf  markers_pomiary,czy_wykonuje_pomiar_DS1
+        clrf    znak_rozkazu_ds
+         
+         
+         
+         
+         ;najpierw wy�lij rozkaz pomiaru
+         ;wykorzystuje procedury kt�re dzia�aj� po wybraniu wysy�ania danych przez polecenie
+         ;
+         ;        "*D1sccbe"
+         ; bcf    markers,czy_rozkaz
+         
+         bsf         markers_pomiary, wysylam_rozkaz_odbioru
+         call     init_ds1820
+         
+         
+         ;LFSR     FSR0, dane_odebrane_z_ds
+         
+         call     petla_wysylania_rozkazu_1
+         bcf         markers_pomiary, wysylam_rozkaz_odbioru
+
+         movlw     dane_odebrane_z_ds
+         movwf     FSR
+         
+         call     petla_odbioru_rozkazu_1
+         
+         
+         ;sprawdz CRC
+         movlw  dane_odebrane_z_ds
+         movwf  FSR        
+         ;9 bajt to CRC
+         movlw    9
+         movwf     n
+         
+         call     check_CRC_DS
+         
+         movf     bajt_CRC,w
+         ;jezeli 0 to jest ok
+         btfsc    STATUS,Z         
+         goto      odbierz_pomiary_temp_show_data
+         
+         
+         ; call    wysylac_napis_CRC_notOK
+         
+        
+        
+         return
+
+petla_odbioru_rozkazu_1
+         movf     jak_duzo_bajtow_odbieram_z_ds,w
+         movwf    tmp7
+            
+         movlw     czas_oczekiwania_60us
+         banksel    PR2
+         movwf    PR2
+         movlw    t2con_dla_60us
+         
+         banksel        T2CON
+         movwf    T2CON
+         clrf     TMR2
+         bcf      PIR1,TMR2IF   
+        
+;procedura sprawdza czy ds1820 cos wysyla jezeli tak to sprawdza przez 60 us czy jest choc na chwile 0
+;normalnie jezeli ds1820 nic nie wysyla to jest caly czas 1 bez rzadnych zmian
+petla_odbioru_z_ds1820_1
+        movlw     8
+        movwf     n
+        clrf      TMR2
+        clrf      INDF
+        bcf       PIR1,TMR2IF
+        
+petla_stan_odebranego_bitu_1
+         
+         call     PIN_LO_1
+        
+         nop
+         nop
+         nop
+         
+         call     PIN_HI_1
+         
+         
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         
+         btfss    port_ds1820,czujnik_ds1820_1
+         bcf      STATUS,C
+         btfsc    port_ds1820,czujnik_ds1820_1
+         bsf      STATUS,C
+         rrf     INDF,f
+         
+czekam_na_kolejny_bit_DS_1
+        btfss    PIR1,TMR2IF
+        goto      czekam_na_kolejny_bit_DS_1
+        
+        bcf       PIR1,TMR2IF
+        
+        decfsz    n,f
+        goto      petla_stan_odebranego_bitu_1
+        incf      FSR,f
+        
+;czy juz przeszly wszystkie bajty z DS
+        decfsz    tmp7,f
+        goto      petla_odbioru_z_ds1820_1
+
+         return      
 
 check_CRC_DS 
          clrf  bajt_CRC
