@@ -88,6 +88,14 @@ _u      equ       b'00011100'
 led_dot_pin   equ  7
 
 
+;led_dot_display
+light_dot1      equ  0
+light_dot10      equ  1
+light_dot100    equ  2
+light_dot1000   equ  3 
+light_dot10000   equ  4 
+
+
 tab_cyfr
          addwf    PCL,f
          retlw    _0
