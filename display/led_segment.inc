@@ -82,6 +82,7 @@ _L       equ      b'00111000'
 _H      equ       b'01110110'
 _r      equ       b'01010000'
 _u      equ       b'00011100'
+_degree  equ      b'01100011'
 
 
 
@@ -246,7 +247,7 @@ divider = divider / .10;
 
     endm
 
-common_leds_start_value equ (1 << (LED_SEGMENT-1))
+common_leds_start_value     equ     (1 << (LED_SEGMENT-1))
 
 ;call this procedure
 ;with following variables
@@ -268,7 +269,6 @@ refresh_led
          rrf      leds_common,w    ;it could be also rlf however it is easier to detect when we reach restart position - when C bit is set
          btfsc    STATUS,C
          movlw    common_leds_start_value
-
          movwf    leds_common
          
          ;first digit to FSR

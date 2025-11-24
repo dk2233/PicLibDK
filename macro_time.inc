@@ -38,7 +38,6 @@ configure_tmr2 macro prescaler_bits, postscaler_bits, period_reg
      LOCAL  timer2_con = prescaler_bits
     LOCAL  a = postscaler_bits << TOUTPS0
     movlw postscaler_bits
-    movlw a
 ;here is an error in macro parsing in gpasm
 ;such thing will not work 
 ;timer2_con |= (postscaler_bits << TOUTPS0) 
@@ -53,3 +52,22 @@ timer2_con |= (1 << TMR2ON)
      movwf  PR2
 
      endm
+
+;good for short time period = simple while loop - no timer needed
+;run specific number of time
+;you need to give an register that will be used to count loop pass
+wait_specific_time_no_tmr_us  macro  mcu_freq , time_to_wait_us, reg 
+        LOCAL  how_many_waits = 4/mcu_freq * .1000000 , nops_loop
+how_many_waits = time_to_wait_us / how_many_waits / .10
+
+        movlw  how_many_waits
+        movwf  reg 
+
+        nop
+nops_loop        fill (nop), .7
+        decfsz   reg,f
+        goto     nops_loop
+        endm
+
+
+        
