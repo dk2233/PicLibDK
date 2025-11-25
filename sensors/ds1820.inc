@@ -1,6 +1,7 @@
 ;ds18_status
 ds18_init_error    equ     0
 ds18_init_ok       equ     1
+ds18_crc_fault     equ     2
 
 
 ;markers_pomiary 
@@ -47,11 +48,13 @@ loop_send_bit1
 send_bit_0
          ;bsf      port_ds18b20,port_pin_ds18b20
          call     PIN_LO         
+         BANKSEL  TMR2
          clrf     TMR2
          nop
          
          bcf      PIR1,TMR2IF
          
+         BANKSEL  port_ds18b20
          bcf      port_ds18b20,port_pin_ds18b20
 loop_send_bit_0
          btfss    PIR1,TMR2IF        
@@ -71,30 +74,21 @@ init_ds1820
          BANKSEL   tris_of_ds18b20_port
          bcf      tris_of_ds18b20_port,port_pin_ds18b20
          
-;ustawiam tmr2 na zliczanie 2 
-         ;movlw    0xff   ; here we need a value + prescaler\postscaler to give about 480 us impuls         
-         ;movwf    PR2
-         
-         configure_tmr2 1 , 1, ds18b20_tmr2_value_to_wait_480us
+         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_480us ; prescaler 1 , post 2
+         ;4/4e6 * 240 * 2 = 480 us
 
-         ;movlw    b'00001100'
-         ;movwf    T2CON
-         BANKSEL PIR1
-         bcf      PIR1,TMR2IF
-;wlaczam przerwanie Tmr2
-         ;bsf      STATUS,RP0
-         ;bsf      PIE1,TMR2IE2
-         ;bcf      STATUS,RP0         
          call     PIN_HI
-         call     PIN_LO
-;daje znacznik ze dotyczy to inicjacji ds1820
-         ;bsf      znaczniki_ds,inicjacja
-;loop to wait until ds18b20 will finish
-        BANKSEL PIR1
-loop_wait_for_init
+         nop
          
-         btfss    PIR1,TMR2IF
-         goto     loop_wait_for_init
+         call     PIN_LO
+         BANKSEL PIE1 
+         bcf  PIE1,TMR2IE
+         BANKSEL TMR2
+         clrf TMR2
+         bcf  PIR1,TMR2IF
+;loop to wait until ds18b20 will finish
+        wait_until_tmr2_period_pass 
+
 ;switch to receive data from DS18
          BANKSEL  tris_of_ds18b20_port
          bsf      tris_of_ds18b20_port,port_pin_ds18b20
@@ -120,11 +114,15 @@ init_ds1820_error
 ;error of ds18b20 initialization
         BANKSEL ds18_status
         bsf ds18_status, ds18_init_error
+        bcf ds18_status, ds18_init_ok
         goto init_ds1820_end
 
 inicjacja_ok
         BANKSEL ds18_status
          bsf ds18_status, ds18_init_ok 
+         bcf ds18_status,ds18_init_error
+
+        wait_until_tmr2_period_pass ; need to finish until 480us perios will finish
 
 init_ds1820_end         
         return 
@@ -132,25 +130,18 @@ init_ds1820_end
              
 
 
-Pomiary_temperatury
+ds18_req_temp_convert
         BANKSEL znak_rozkazu_ds
         clrf    znak_rozkazu_ds
         
          movlw    9
          movwf    jak_duzo_bajtow_odbieram_z_ds
          
-         ; movlw       HIGH rozkaz_pomiaru
-         ; movwf       TBLPTRH
-      
-         ; movlw       LOW rozkaz_pomiaru
-         ; movwf       TBLPTRL
-         
          bsf         markers_pomiary, wysylam_rozkaz_pomiaru
          
-         ;najpierw wy�lij rozkaz pomiaru
-         ;wykorzystuje procedury kt�re dzia�aj� po wybraniu wysy�ania danych przez polecenie
-         ;
-         ;        "*D1scc44"
+         ;1. send request to measure temperature   0xcc 0x44
+         ;2. wait about 1 sec
+         ;3. send request to read temperature      0x33
          
          clrf   znak_rozkazu_ds
          
@@ -160,80 +151,17 @@ Pomiary_temperatury
          ;error no init finished properly
          RETURN
          
-         call     petla_wysylania_rozkazu_1
+         call     ds18_send_request_loop
 
          
-         ;pozniej czekaj 1 s
+         ;wait about  1 s - for 12 bit measurement it is 750 ms
          BANKSEL  markers_pomiary
          bcf         markers_pomiary, wysylam_rozkaz_pomiaru
          bsf      markers_pomiary,czekam_na_odczyt_DS1
          
          return
      
-;DS18B20
-petla_wysylania_rozkazu_1
-
-        BANKSEL  markers_pomiary
-        btfsc    markers_pomiary, wysylam_rozkaz_pomiaru
-        movlw HIGH rozkaz_pomiaru
-        
-        
-        btfsc    markers_pomiary, wysylam_rozkaz_odbioru
-        movlw HIGH rozkaz_odbioru
-        
-        movwf    PCLATH
-        
-        btfsc    markers_pomiary, wysylam_rozkaz_pomiaru
-         call     rozkaz_pomiaru
- 
-        btfsc    markers_pomiary, wysylam_rozkaz_odbioru
-        call rozkaz_odbioru
-        
-         clrf     PCLATH
-         ;movwf        TABLAT,w
-	 movwf     polecenie_wysylane
-         xorlw     0
-         btfsc    STATUS,Z
-         return             
-          
-         incf   znak_rozkazu_ds,f
-         
-         
-         ;jezeli 0 to skocz do wyswietlania slowa z linii 2
-         
-         
-         movlw     ds18b20_tmr2_value_to_wait_60us      
-         ;ustawiam TMR2 na odbieranie
-         
-         banksel  PR2
-         movwf    PR2
-         banksel  T2CON
-;ustawiam 60us         
-         movlw    ds18b20_tmr2_value_to_wait_60us
-         movwf    T2CON
-         bcf      PIR1,TMR2IF
-         clrf      TMR2
-         movlw     8
-         movwf     n
-         
-petla_sending_pomiar_1
-
-        btfss     polecenie_wysylane,0
-        call      send_bit_0
-        btfsc     polecenie_wysylane,0
-        call      send_bit_1
-        bsf       port_ds18b20,port_pin_ds18b20
-        
-        bcf       STATUS,C
-        rrf       polecenie_wysylane,f
-        
-        decfsz    n,f
-        goto      petla_sending_pomiar_1
-         
-        goto       petla_wysylania_rozkazu_1
- 
-
-odbierz_pomiary_temp
+ds18_req_temp_read
         BANKSEL markers_pomiary
        bcf  markers_pomiary,odczytaj_pomiar_DS1
        bcf  markers_pomiary,czekam_na_odczyt_DS1
@@ -243,8 +171,10 @@ odbierz_pomiary_temp
          bsf         markers_pomiary, wysylam_rozkaz_odbioru
          call     init_ds1820
          
+         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 4 , post 2
          
-         call     petla_wysylania_rozkazu_1
+         call     ds18_send_request_loop
+         BANKSEL markers_pomiary
          bcf         markers_pomiary, wysylam_rozkaz_odbioru
 
 
@@ -258,51 +188,113 @@ odbierz_pomiary_temp
          ;sprawdz CRC
          BANKISEL  dane_odebrane_z_ds
          movlw  LOW dane_odebrane_z_ds
-         movwf  FSR        
+         movwf  FSR     
+         BANKSEL  n_bit   
          ;9 bajt to CRC
          movlw    9
-         movwf    n
+         movwf    n_bit
          
          call     check_CRC_DS
-         
-         movf     bajt_CRC,w
+         BANKSEL ds8_CRC_result
+         movf     ds8_CRC_result,w
          ;jezeli 0 to jest ok
          btfsc    STATUS,Z         
+         bcf ds18_status, ds18_crc_fault
+
+         ;show crc fault
+         btfss    STATUS,Z         
+         bsf ds18_status, ds18_crc_fault
+         
          goto      odbierz_pomiary_temp_show_data
-         
-         
-         ; call    wysylac_napis_CRC_notOK
-         
-        
-        
          return
+;DS18B20
+
+ds18_send_request_loop
+        BANKSEL  markers_pomiary
+        btfsc    markers_pomiary, wysylam_rozkaz_pomiaru
+        movlw HIGH rozkaz_pomiaru
+        
+        btfsc    markers_pomiary, wysylam_rozkaz_odbioru
+        movlw HIGH rozkaz_odbioru
+        
+        movwf    PCLATH
+        
+        btfsc    markers_pomiary, wysylam_rozkaz_pomiaru
+        call     rozkaz_pomiaru
+ 
+        btfsc    markers_pomiary, wysylam_rozkaz_odbioru
+        call rozkaz_odbioru
+        
+         clrf     PCLATH
+	 movwf     polecenie_wysylane
+         xorlw     0
+         btfsc    STATUS,Z
+         return             
+          
+         incf   znak_rozkazu_ds,f
+         
+;set 60us wait time
+         BANKSEL   PIR1
+         clrf      TMR2
+         bcf      PIR1,TMR2IF
+         movlw     8 ;send 8 bit of request byte
+         movwf     n_bit
+         
+ds18_send_request_loop_send_byte
+
+        BANKSEL   polecenie_wysylane
+        btfss     polecenie_wysylane,0
+        call      send_bit_0
+        BANKSEL   polecenie_wysylane
+        btfsc     polecenie_wysylane,0
+        call      send_bit_1
+        bsf       port_ds18b20,port_pin_ds18b20
+        
+        bcf       STATUS,C
+        rrf       polecenie_wysylane,f
+        
+        decfsz    n_bit,f
+        goto      ds18_send_request_loop_send_byte
+         
+        goto       ds18_send_request_loop
+ 
+
 
 
 odbierz_pomiary_temp_show_data
-         
+         BANKSEL ds18_status
+         bcf   ds18_status, ds18_crc_fault
          BANKISEL  dane_odebrane_z_ds         
          movlw     LOW dane_odebrane_z_ds
          movwf     FSR
          
 ;call     zamien_dane_na_temp
-        
-        
+        swapf  INDF,w
+        andlw  0x0f 
+        movwf ds18_measured_temp
+
+        movf   INDF,w 
+        andlw  0x0f 
+        movwf   ds18_measured_temp_01
+
+
+        incf  FSR,f 
+        swapf  INDF,w 
+        andlw   0xf0 
+        addwf  ds18_measured_temp,f 
+
          return
          
 
 
 
 petla_odbioru_rozkazu_1
+        BANKSEL jak_duzo_bajtow_odbieram_z_ds
          movf     jak_duzo_bajtow_odbieram_z_ds,w
          movwf    tmp7
             
-         movlw     ds18b20_tmr2_value_to_wait_60us
-         banksel    PR2
-         movwf    PR2
-         movlw    ds18b20_tmr2_value_to_wait_60us
-         
-         banksel        T2CON
-         movwf    T2CON
+         ;configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 4 , post 2
+         banksel TMR2
          clrf     TMR2
          bcf      PIR1,TMR2IF   
         
@@ -310,38 +302,22 @@ petla_odbioru_rozkazu_1
 ;normalnie jezeli ds1820 nic nie wysyla to jest caly czas 1 bez rzadnych zmian
 petla_odbioru_z_ds1820_1
         movlw     8
-        movwf     n
+        movwf     n_bit
         clrf      TMR2
         clrf      INDF
         bcf       PIR1,TMR2IF
         
 petla_stan_odebranego_bitu_1
-         
          call     PIN_LO
         
-         nop
-         nop
-         nop
-         
+         ;wait_specific_time_no_tmr_us   micro_freq, .5, operandl
+         ;fill   (nop), .4
          call     PIN_HI
          
          
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
-         nop
+         wait_specific_time_no_tmr_us   micro_freq, .6, operandl
          
+         BANKSEL port_ds18b20
          btfss    port_ds18b20,port_pin_ds18b20
          bcf      STATUS,C
          btfsc    port_ds18b20,port_pin_ds18b20
@@ -354,7 +330,7 @@ czekam_na_kolejny_bit_DS_1
         
         bcf       PIR1,TMR2IF
         
-        decfsz    n,f
+        decfsz    n_bit,f
         goto      petla_stan_odebranego_bitu_1
         incf      FSR,f
         
@@ -365,48 +341,48 @@ czekam_na_kolejny_bit_DS_1
          return      
 
 check_CRC_DS 
-         BANKSEL bajt_CRC
-         clrf  bajt_CRC
+         BANKSEL ds8_CRC_result
+         clrf  ds8_CRC_result
          ;movlw    
    
 ;tablica danych DS18b20 musi byc w FSR2
 check_CRC_DS_loop
          movf INDF,w   
          incf   FSR,f
-         xorwf bajt_CRC,f       
+         xorwf ds8_CRC_result,f       
          movlw 0     
          
-         btfsc bajt_CRC,0 
+         btfsc ds8_CRC_result,0 
          xorlw 0x5e       
          
-         btfsc bajt_CRC,1 
+         btfsc ds8_CRC_result,1 
          xorlw 0xbc 
          
-         btfsc bajt_CRC,2 
+         btfsc ds8_CRC_result,2 
          xorlw 0x61 
          
-         btfsc bajt_CRC,3 
+         btfsc ds8_CRC_result,3 
          xorlw 0xc2 
          
-         btfsc bajt_CRC,4 
+         btfsc ds8_CRC_result,4 
          xorlw 0x9d 
          
-         btfsc bajt_CRC,5 
+         btfsc ds8_CRC_result,5 
          xorlw 0x23 
          
-         btfsc bajt_CRC,6 
+         btfsc ds8_CRC_result,6 
          xorlw 0x46 
          
-         btfsc bajt_CRC,7 
+         btfsc ds8_CRC_result,7 
          xorlw 0x8c 
          
-         movwf bajt_CRC   
+         movwf ds8_CRC_result   
          
-         decfsz n,f 
+         decfsz n_bit,f 
          goto check_CRC_DS_loop         
                      
 
-         ;movwf bajt_CRC         
+         ;movwf ds8_CRC_result         
  
 
          return         

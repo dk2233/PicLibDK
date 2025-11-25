@@ -57,17 +57,29 @@ timer2_con |= (1 << TMR2ON)
 ;run specific number of time
 ;you need to give an register that will be used to count loop pass
 wait_specific_time_no_tmr_us  macro  mcu_freq , time_to_wait_us, reg 
-        LOCAL  how_many_waits = 4/mcu_freq * .1000000 , nops_loop
-how_many_waits = time_to_wait_us / how_many_waits / .10
+        LOCAL  how_many_waits = 4 * .1000000/mcu_freq , nops_loop
+how_many_waits = time_to_wait_us / how_many_waits / .4
 
         movlw  how_many_waits
         movwf  reg 
 
         nop
-nops_loop        fill (nop), .7
-        decfsz   reg,f
-        goto     nops_loop
+nops_loop        
+        ;fill (nop), .7
+        nop    ; 1 cycle
+        decfsz   reg,f  ; 1 cycle
+        goto     nops_loop ; 2 cycle
         endm
+
+wait_until_tmr2_period_pass  macro 
+        LOCAL  loop_wait_for_PIR_mark
+
+        BANKSEL PIR1
+loop_wait_for_PIR_mark
+        btfss   PIR1,TMR2IF
+        goto    loop_wait_for_PIR_mark
+        endm
+
 
 
         
