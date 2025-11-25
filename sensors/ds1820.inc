@@ -5,12 +5,12 @@ ds18_crc_fault     equ     2
 
 
 ;markers_pomiary 
-wykonaj_pomiar   equ   0
+;wykonaj_pomiar   equ   0
 wysylam_rozkaz_pomiaru   equ  1
 czekam_na_odczyt_DS1    equ  2
 wysylam_rozkaz_odbioru   equ  3 
 odczytaj_pomiar_DS1      equ 4
-czy_wykonuje_pomiar_DS1   equ  5
+;czy_wykonuje_pomiar_DS1   equ  5
 
 
 ;*                                  *************************POLecenie DS1820
@@ -137,7 +137,7 @@ ds18_req_temp_convert
          movlw    9
          movwf    jak_duzo_bajtow_odbieram_z_ds
          
-         bsf         markers_pomiary, wysylam_rozkaz_pomiaru
+         clrf   markers_pomiary
          
          ;1. send request to measure temperature   0xcc 0x44
          ;2. wait about 1 sec
@@ -151,31 +151,33 @@ ds18_req_temp_convert
          ;error no init finished properly
          RETURN
          
+         bsf         markers_pomiary, wysylam_rozkaz_pomiaru
          call     ds18_send_request_loop
 
          
          ;wait about  1 s - for 12 bit measurement it is 750 ms
          BANKSEL  markers_pomiary
-         bcf         markers_pomiary, wysylam_rozkaz_pomiaru
+         bcf      markers_pomiary, wysylam_rozkaz_pomiaru
          bsf      markers_pomiary,czekam_na_odczyt_DS1
          
          return
      
 ds18_req_temp_read
         BANKSEL markers_pomiary
-       bcf  markers_pomiary,odczytaj_pomiar_DS1
-       bcf  markers_pomiary,czekam_na_odczyt_DS1
-       bcf  markers_pomiary,czy_wykonuje_pomiar_DS1
+        clrf markers_pomiary
+       ;bcf  markers_pomiary,odczytaj_pomiar_DS1
+       ;bcf  markers_pomiary,czekam_na_odczyt_DS1
+       ;bcf  markers_pomiary,czy_wykonuje_pomiar_DS1
+         bsf         markers_pomiary, wysylam_rozkaz_odbioru
         clrf    znak_rozkazu_ds
          
-         bsf         markers_pomiary, wysylam_rozkaz_odbioru
          call     init_ds1820
          
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 4 , post 2
+         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          
          call     ds18_send_request_loop
          BANKSEL markers_pomiary
-         bcf         markers_pomiary, wysylam_rozkaz_odbioru
+         bcf      markers_pomiary, wysylam_rozkaz_odbioru
 
 
          BANKISEL  dane_odebrane_z_ds
@@ -262,8 +264,6 @@ ds18_send_request_loop_send_byte
 
 
 odbierz_pomiary_temp_show_data
-         BANKSEL ds18_status
-         bcf   ds18_status, ds18_crc_fault
          BANKISEL  dane_odebrane_z_ds         
          movlw     LOW dane_odebrane_z_ds
          movwf     FSR
@@ -311,11 +311,12 @@ petla_stan_odebranego_bitu_1
          call     PIN_LO
         
          ;wait_specific_time_no_tmr_us   micro_freq, .5, operandl
-         ;fill   (nop), .4
+         fill   (nop), .1
+
          call     PIN_HI
          
          
-         wait_specific_time_no_tmr_us   micro_freq, .6, operandl
+         wait_specific_time_no_tmr_us   micro_freq, .8, operandl
          
          BANKSEL port_ds18b20
          btfss    port_ds18b20,port_pin_ds18b20
