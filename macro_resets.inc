@@ -1,3 +1,5 @@
+wdg_reset_reason  equ   1
+
 ;if return value in WREG is 1 - wdg reset is reset reason
 detect_watchdog_happens  macro
     LOCAL detect_watchdog_happens_0, detect_watchdog_happens_1
@@ -13,6 +15,6 @@ detect_watchdog_happens  macro
     btfss  PCON,NOT_BOR
     goto  detect_watchdog_happens_0
 detect_watchdog_happens_1
-    movlw 1
+    movlw wdg_reset_reason
 detect_watchdog_happens_0
     endm    
