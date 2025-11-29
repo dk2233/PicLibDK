@@ -61,3 +61,12 @@ check_tmr2_isr macro  func_to_process_tmr2
 
 check_tmr2_isr_exit
     endm
+
+
+disable_all_isr macro 
+    bcf     INTCON,GIE 
+    endm
+
+enable_all_isr  macro 
+    bsf     INTCON,GIE 
+    endm

@@ -82,8 +82,12 @@ _L       equ      b'00111000'
 _H      equ       b'01110110'
 _r      equ       b'01010000'
 _u      equ       b'00011100'
+_degree  equ      b'01100011'
 
 
+;number to show specific symbol
+led_minus     equ     0x14
+led_H         equ     0x19 
 
 led_dot_pin   equ  7
 
@@ -95,6 +99,12 @@ light_dot100    equ  2
 light_dot1000   equ  3 
 light_dot10000   equ  4 
 
+;leds possible bits
+led1              equ      0
+led10             equ      1
+led100            equ      2
+led1000           equ      3
+led10000          equ      4
 
 tab_cyfr
          addwf    PCL,f
@@ -246,7 +256,7 @@ divider = divider / .10;
 
     endm
 
-common_leds_start_value equ (1 << (LED_SEGMENT-1))
+common_leds_start_value     equ     (1 << (LED_SEGMENT-1))
 
 ;call this procedure
 ;with following variables
@@ -268,7 +278,6 @@ refresh_led
          rrf      leds_common,w    ;it could be also rlf however it is easier to detect when we reach restart position - when C bit is set
          btfsc    STATUS,C
          movlw    common_leds_start_value
-
          movwf    leds_common
          
          ;first digit to FSR
