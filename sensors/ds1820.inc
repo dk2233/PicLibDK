@@ -87,12 +87,6 @@ conversion_busy
 
          wait_specific_time_no_tmr_us  mcu_freq, .4, operandl 
 
-        BANKSEL conversion_busyL
-
-        incf conversion_busyL,f
-        SKPNZ
-        incf conversion_busyH,F
-
         BANKSEL port_ds18b20
         btfss   port_ds18b20, port_pin_ds18b20
         goto    conversion_busy
