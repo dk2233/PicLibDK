@@ -1,26 +1,62 @@
+;to use this library
+
+;port_ds1820
+;   - has to be set
+;tris_of_ds18b20_port
+; - choose specific TRIS register
+;port_pin_ds18b20
+; - which pin
+;ds18b20_tmr2_value_to_wait_480us
+; PR2  -  value to pass 480us 
+;ds18b20_tmr2_value_to_wait_60us
+; PR2 to measure 60 us 
+;ds18_status -
+; different information about ds18 operation
+;n_bit - counter to send data to ds18b20
+;ds18_configuration 
+; this holds information about power source 
+;ds18_number_of_receive_bytes
+; to hold number of bytes expected to be received
+;ds18_command_to_be_send
+; variable should store command to be send
+;ds18_TH 
+;       variable to set user byte TH
+;ds18_TL
+;       variable to set user byte TL
+;ds18_config_byte
+;       variable holds config byte to be send to ds18b20
+;ds18_expected_resolution
+; set 9,10, 11, 12 
+
 ;ds18_status
 ds18_init_error    equ     0
 ds18_init_ok       equ     1
 ds18_crc_fault     equ     2
 ds18_conv_busy     equ     3
-ds18_parasite_power  equ   4
-ds18_normal_power    equ   5 
+ds18_wait_for_measurement   equ  4
+ds18_below_zero    equ    5
 ds18_precision_was_read  equ  6
 
+;ds18_configuration
+ds18_parasite_power  equ   0
+ds18_normal_power    equ   1 
 
-;markers_pomiary 
-;wykonaj_pomiar   equ   0
-wysylam_rozkaz_pomiaru   equ  1
-czekam_na_odczyt_DS1    equ  2
-wysylam_rozkaz_odbioru   equ  3 
-odczytaj_pomiar_DS1      equ 4
-;czy_wykonuje_pomiar_DS1   equ  5
+DS18B20_TH_byte      equ    2 
+DS18B20_TL_byte      equ    3 
+DS18B20_offset_of_config_byte   equ  4
 
 DS18b20_read_rom     equ 0x33
 DS18b20_read_power_supply  equ   0xb4
 DS18b20_skip_rom     equ    0xCC
 DS18b20_temp_convert     equ    0x44
 DS18b20_read_scratchpad   equ   0xbe
+DS18b20_write_scratchpad  equ   0x4e
+
+;config byte 
+
+DS18B20_config_R0    equ  5
+DS18B20_resolution_mask   equ    b'10011111'
+DS18B20_low_resolution  equ 9
 
 ;*                                  *************************POLecenie DS1820
 ; in this procedure TMR2 is used for DS18B20 driver
@@ -164,16 +200,11 @@ init_ds1820_end
 
 
 ds18_req_temp_convert
-        BANKSEL znak_rozkazu_ds
-        clrf    znak_rozkazu_ds
         
-         clrf   markers_pomiary
          
          ;1. send request to measure temperature   0xcc 0x44
          ;2. wait about 1 sec
          ;3. send request to read temperature      0x33
-         
-         clrf   znak_rozkazu_ds
          
          ;disable_all_isr
          call     init_ds1820
@@ -183,32 +214,26 @@ ds18_req_temp_convert
          RETURN
 
          configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
-         BANKSEL polecenie_wysylane
+         ;observed issues without critical section
+         disable_all_isr
          movlw   DS18b20_skip_rom
-         movwf   polecenie_wysylane
-
          call     ds18_send_request_loop_send_byte_start
          
-         BANKSEL polecenie_wysylane
          movlw   DS18b20_temp_convert
-         movwf   polecenie_wysylane
-
          call     ds18_send_request_loop_send_byte_start
-
+        enable_all_isr
          ;wait about  1 s - for 12 bit measurement it is 750 ms
-         BANKSEL  markers_pomiary
-         bsf      markers_pomiary,czekam_na_odczyt_DS1
+         BANKSEL  ds18_status
+         bsf      ds18_status,ds18_wait_for_measurement
 
          call check_ds_processing
-         ;enable_all_isr
          
          return
      
 ds18_req_scratchpad_read
-        BANKSEL markers_pomiary
-        clrf markers_pomiary
+        BANKSEL ds18_number_of_receive_bytes
          movlw    9
-         movwf    jak_duzo_bajtow_odbieram_z_ds
+         movwf    ds18_number_of_receive_bytes
 
         call check_ds_processing
          
@@ -219,30 +244,24 @@ ds18_req_scratchpad_read
          ;error no init finished properly
          retlw  1
          configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
-         ;disable_all_isr 
-         BANKSEL  polecenie_wysylane
+         disable_all_isr 
          movlw    DS18b20_skip_rom
-         movwf    polecenie_wysylane         
          call     ds18_send_request_loop_send_byte_start
          
-         BANKSEL  polecenie_wysylane
          movlw    DS18b20_read_scratchpad
-         movwf    polecenie_wysylane         
          call     ds18_send_request_loop_send_byte_start
 
-         BANKSEL markers_pomiary
-         bcf      markers_pomiary, wysylam_rozkaz_odbioru
-
-         BANKISEL  dane_odebrane_z_ds
-         movlw     LOW dane_odebrane_z_ds
+         BANKISEL  ds18_read_from_RAM
+         movlw     LOW ds18_read_from_RAM
          movwf     FSR
          
          call     petla_odbioru_rozkazu_1
-        ;enable_all_isr 
+         ;observed issues without critical section
+        enable_all_isr 
          
          ;sprawdz CRC
-         BANKISEL  dane_odebrane_z_ds
-         movlw  LOW dane_odebrane_z_ds
+         BANKISEL  ds18_read_from_RAM
+         movlw  LOW ds18_read_from_RAM
          movwf  FSR     
          BANKSEL  n_bit   
          ;9 bajt to CRC
@@ -265,8 +284,6 @@ ds18_req_scratchpad_read
 ;DS18B20
 
 ds18_read_power_supply 
-        BANKSEL markers_pomiary
-        clrf markers_pomiary
          call     init_ds1820
          
          BANKSEL ds18_status
@@ -275,16 +292,11 @@ ds18_read_power_supply
          RETURN
          configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          
-         BANKSEL polecenie_wysylane
+         disable_all_isr
          movlw   DS18b20_skip_rom
-         movwf   polecenie_wysylane
-
          call     ds18_send_request_loop_send_byte_start
          
-         BANKSEL polecenie_wysylane
          movlw   DS18b20_read_power_supply
-         movwf   polecenie_wysylane
-
          call     ds18_send_request_loop_send_byte_start
 ;read power type = 0 or 1
          call PIN_LO
@@ -295,28 +307,27 @@ ds18_read_power_supply
 
          wait_specific_time_no_tmr_us  mcu_freq, .8, operandl 
          ;fill (nop), .2
-
+        enable_all_isr
         BANKSEL port_ds18b20
         btfss   port_ds18b20, port_pin_ds18b20
         goto    ds18_read_power_supply_parasite 
 
-        BANKSEL ds18_status
+        BANKSEL ds18_configuration
 
-        bcf  ds18_status, ds18_parasite_power
-        bsf  ds18_status, ds18_normal_power
+        bcf  ds18_configuration, ds18_parasite_power
+        bsf  ds18_configuration, ds18_normal_power
         return 
 
 ds18_read_power_supply_parasite
-        BANKSEL ds18_status
-        bsf  ds18_status, ds18_parasite_power
-        bcf  ds18_status, ds18_normal_power
+        BANKSEL ds18_configuration
+        bsf  ds18_configuration, ds18_parasite_power
+        bcf  ds18_configuration, ds18_normal_power
         return 
 
 ds18_req_id_read
-        BANKSEL markers_pomiary
-        clrf markers_pomiary
+        BANKSEL  ds18_number_of_receive_bytes
          movlw    8
-         movwf    jak_duzo_bajtow_odbieram_z_ds
+         movwf    ds18_number_of_receive_bytes
          disable_all_isr 
          call     init_ds1820
          
@@ -326,23 +337,23 @@ ds18_req_id_read
          RETURN
          configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          
-         BANKSEL polecenie_wysylane
+         BANKSEL ds18_command_to_be_send
          movlw   DS18b20_read_rom
-         movwf   polecenie_wysylane
+         movwf   ds18_command_to_be_send
 
          call     ds18_send_request_loop_send_byte_start
 
 
-         BANKISEL  dane_odebrane_z_ds
-         movlw     LOW dane_odebrane_z_ds
+         BANKISEL  ds18_read_from_RAM
+         movlw     LOW ds18_read_from_RAM
          movwf     FSR
          
          call     petla_odbioru_rozkazu_1
          
          enable_all_isr
          ;sprawdz CRC
-         BANKISEL  dane_odebrane_z_ds
-         movlw  LOW dane_odebrane_z_ds
+         BANKISEL  ds18_read_from_RAM
+         movlw  LOW ds18_read_from_RAM
          movwf  FSR     
          BANKSEL  n_bit   
          ;8 bajt to CRC
@@ -361,39 +372,53 @@ ds18_req_id_read
          bsf ds18_status, ds18_crc_fault
          
          return
-ds18_send_request_loop
-        BANKSEL  markers_pomiary
-        btfsc    markers_pomiary, wysylam_rozkaz_pomiaru
-        movlw HIGH rozkaz_pomiaru
+;3 bytes have to be put into arguments
+ds18_req_scratchpad_write
         
-        btfsc    markers_pomiary, wysylam_rozkaz_odbioru
-        movlw HIGH rozkaz_odbioru
-        
-        movwf    PCLATH
-        
-        btfsc    markers_pomiary, wysylam_rozkaz_pomiaru
-        call     rozkaz_pomiaru
- 
-        btfsc    markers_pomiary, wysylam_rozkaz_odbioru
-        call rozkaz_odbioru
-        
-         clrf     PCLATH
-	 movwf     polecenie_wysylane
-         xorlw     0
-         btfsc    STATUS,Z
-         return             
-          
-         incf   znak_rozkazu_ds,f
+        call check_ds_processing
          
-;set 60us wait time
-         call   ds18_send_request_loop_send_byte_start
+         call     init_ds1820
+         
+         BANKSEL ds18_status
+         btfss   ds18_status,ds18_init_ok 
+         ;error no init finished properly
+         retlw  1
+         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
+         disable_all_isr 
+         movlw    DS18b20_skip_rom
+         call     ds18_send_request_loop_send_byte_start
+         
+         movlw    DS18b20_write_scratchpad
+         call     ds18_send_request_loop_send_byte_start
 
-        goto       ds18_send_request_loop
-        return
+         BANKISEL  ds18_TH
+         movlw     ds18_TH 
+         movwf     FSR     
+
+ds18_req_scratchpad_write_loop
+        movf  INDF,w 
+        call     ds18_send_request_loop_send_byte_start
+
+
+        movf  FSR,W
+        xorlw ds18_config_byte
+        SKPNZ ;do we reached all 3 bytes to be write?
+        goto ds18_req_scratchpad_write_exit
+
+        incf  FSR,f 
+        goto ds18_req_scratchpad_write_loop
+
+ds18_req_scratchpad_write_exit
+        enable_all_isr
+        ;means fine
+        retlw   0
+
 
          
 ds18_send_request_loop_send_byte_start
 
+         BANKSEL  ds18_command_to_be_send
+        movwf     ds18_command_to_be_send
          BANKSEL   PIR1
          clrf      TMR2
          bcf      PIR1,TMR2IF
@@ -401,32 +426,103 @@ ds18_send_request_loop_send_byte_start
          movwf     n_bit
 ds18_send_request_loop_send_byte
 
-        BANKSEL   polecenie_wysylane
-        btfss     polecenie_wysylane,0
+        BANKSEL   ds18_command_to_be_send
+        btfss     ds18_command_to_be_send,0
         call      send_bit_0
-        BANKSEL   polecenie_wysylane
-        btfsc     polecenie_wysylane,0
+        BANKSEL   ds18_command_to_be_send
+        btfsc     ds18_command_to_be_send,0
         call      send_bit_1
         
         bcf       STATUS,C
-        rrf       polecenie_wysylane,f
+        rrf       ds18_command_to_be_send,f
         
         decfsz    n_bit,f
         goto      ds18_send_request_loop_send_byte
         return
  
+;in FSR place first byte of read scratchpad
+; 
+ds18_check_resolution
+        movlw  DS18B20_offset_of_config_byte
+        addwf  FSR,F
+        movf   INDF,w 
+        movwf  operandl ; common gpr
+
+        movlw  DS18B20_config_R0 
+        BANKSEL n_bit
+        movwf  n_bit 
+        shift_byte_n_times shift_byte_right, operandl,  n_bit 
+
+        movlw  DS18B20_low_resolution
+        addwf  operandl,W
 
 
+        return   
 
-odbierz_pomiary_temp_show_data
-        BANKSEL markers_pomiary
-         clrf markers_pomiary
-         BANKISEL  dane_odebrane_z_ds         
-         movlw     LOW dane_odebrane_z_ds
-         movwf     FSR
+ds18_set_resolution macro temp_var 
+        BANKSEL temp_var
+
+        movlw  DS18B20_low_resolution
+        subwf  ds18_expected_resolution,w
+        movwf temp_var
+        movlw  DS18B20_config_R0  ;how much move bits
+        movwf  n_bit 
+        shift_byte_n_times shift_byte_left, temp_var, n_bit
+
+        BANKISEL ds18_read_from_RAM
+        movlw  LOW ds18_read_from_RAM
+        addlw  DS18B20_offset_of_config_byte
+        movwf  FSR 
+        movf   INDF,w
+        andlw  DS18B20_resolution_mask
+        movwf  ds18_config_byte
+
+        BANKSEL ds18_config_byte
+        movf    temp_var,w ; 
+        addwf   ds18_config_byte,f
+        endm
+
+check_below_zero_measurement   macro temp_h 
+        movlw  0xf0 
+        BANKSEL temp_h 
+        andwf  temp_h,w
+        BANKSEL ds18_status
+        bcf  ds18_status, ds18_below_zero
+        SKPZ 
+        bsf  ds18_status, ds18_below_zero
+
+        ;if 0 it means + measurement
+        ;if not 0 means - below 0
+        endm 
+
+ds18_translate_measurements_to_dec
+         BANKISEL  ds18_read_from_RAM         
+         movlw     LOW ds18_read_from_RAM
+         movwf     FSR 
+        incf FSR,f ;fsr shows temp_MSB
+        check_below_zero_measurement  INDF
+        SKPNZ  
+        goto  convert_temperature_positive
+
+
+        comf INDF,f ;temp_H
+        decf FSR,f ;fsr shows temp_LSB
+        ;convert to positive - minus will be added 
+        comf INDF,F ;temp_L
+        incf INDF,f ;+1
+        SKPZ 
+        goto convert_temperature_positive
+        incf FSR,f  
+        incf INDF,f
+
          
+convert_temperature_positive
+         BANKISEL  ds18_read_from_RAM         
+         movlw     LOW ds18_read_from_RAM
+         movwf     FSR 
         swapf  INDF,w
         andlw  0x0f 
+        BANKSEL ds18_measured_temp
         movwf ds18_measured_temp
 
         movf   INDF,w 
@@ -440,20 +536,48 @@ odbierz_pomiary_temp_show_data
         addwf  ds18_measured_temp,f 
 
 
+        movlw HIGH  tab_fraction
+        BANKSEL PCLATH
+        movwf  PCLATH
+        BANKSEL ds18_measured_temp
+        movf ds18_measured_temp_01,w 
         ;calculation of fraction requires knowledge of current bit precision
         ;12 bit , 11 bit, 10 bit, 9 bit
         ;that gives following precision
         ;1/16  ,  1/8,   1/4 ,   1/2
         ;this information is read every time srachtpad is read with 0xBE command
+        call  tab_fraction
+        movwf ds18_measured_temp_01
 
          return
-         
-
+;we have only 16 possible fraction - there is no reason to calculate it
+;better to simply translate each possible ds18b20 fraction byte to its 
+;numerical representation
+;created with Python
+;for i in range(0, 16): print("dt ",round(10*(i * 1/16.))," ; ", i*1/16. )
+tab_fraction
+        addwf PCL,f 
+        dt  0  ;  0.0
+        dt  1  ;  0.0625
+        dt  1  ;  0.125
+        dt  2  ;  0.1875
+        dt  2  ;  0.25
+        dt  3  ;  0.3125
+        dt  4  ;  0.375
+        dt  4  ;  0.4375
+        dt  5  ;  0.5
+        dt  6  ;  0.5625
+        dt  6  ;  0.625
+        dt  7  ;  0.6875
+        dt  8  ;  0.75
+        dt  8  ;  0.8125
+        dt  9  ;  0.875
+        dt  9  ;  0.9375
 
 
 petla_odbioru_rozkazu_1
-        BANKSEL jak_duzo_bajtow_odbieram_z_ds
-         movf     jak_duzo_bajtow_odbieram_z_ds,w
+        BANKSEL ds18_number_of_receive_bytes
+         movf     ds18_number_of_receive_bytes,w
          movwf    tmp7
             
          ;configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 4 , post 2
@@ -546,21 +670,4 @@ check_CRC_DS_loop
 
          return         
 
-rozkaz_pomiaru         
-        BANKSEL  znak_rozkazu_ds
-        movf     znak_rozkazu_ds,w
-         addwf    PCL,f         
-         dt   0xcc,0x44,0x00
-
-rozkaz_odbioru
-        BANKSEL  znak_rozkazu_ds
-        movf     znak_rozkazu_ds,w
-         addwf    PCL,f
-         dt   0xcc,0xbe,0x00
-         
-rozkac_id
-        BANKSEL  znak_rozkazu_ds
-        movf     znak_rozkazu_ds,w
-         addwf    PCL,f
-         dt       0x33,0x00
 ;*********KOniec ds1820

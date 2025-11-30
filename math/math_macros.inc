@@ -174,3 +174,21 @@ UOK46LL
 
         endm
 
+shift_byte_left   equ  1
+shift_byte_right   equ  0
+
+shift_byte_n_times   macro direction, byte, n_times 
+     LOCAL shift_byte_n_times_loop 
+
+shift_byte_n_times_loop
+    BANKSEL byte
+    bcf STATUS, C
+    if (direction == shift_byte_left)
+    rlf byte,f
+    elif (direction == shift_byte_right)
+    rrf byte,f
+    endif
+    BANKSEL n_times
+    decfsz  n_times,f 
+    goto shift_byte_n_times_loop
+    endm

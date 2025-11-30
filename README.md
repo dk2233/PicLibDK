@@ -26,3 +26,10 @@ initialization macros
 timer macros
 
 detect watchdog macro
+
+
+
+sensors:
+ds18b20 - 
+sh11 - (in nearby future)
+LM35 (same)

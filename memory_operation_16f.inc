@@ -85,7 +85,7 @@ compare1byte_set_when_same macro a, a1 , reg , bit_same
 	endm 
 ;move literal 2 bytes into ram variable (var , var + 1)
 movel_2bytes macro literal , var
-
+	BANKSEL var
     movlw   literal & 0xff
 	movwf   var  
     movlw   (literal >> 8) & 0xff
@@ -94,7 +94,7 @@ movel_2bytes macro literal , var
 
 ;move literal 24bits into ram variable (var , var + 1, var+2)
 movel_3bytes macro literal , var
-
+	BANKSEL var
     movlw   literal & 0xff
 	movwf   var  
     movlw   (literal >> 8) & 0xff
@@ -141,6 +141,7 @@ check16bit_if_0_Z_skip_next_line_exit
 
 
 move_2bytes_into_2bytes macro sourceL, destinationL
+	BANKSEL destinationL
 	movf sourceL,W
 	movwf destinationL 
 	movf sourceL+1, W 
@@ -148,6 +149,7 @@ move_2bytes_into_2bytes macro sourceL, destinationL
 	endm
 
 move_3bytes_into_3bytes macro sourceL, destinationL
+	BANKSEL destinationL
 	movf sourceL,W
 	movwf destinationL 
 	movf sourceL+1, W 
