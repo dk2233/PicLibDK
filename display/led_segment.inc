@@ -88,6 +88,7 @@ _degree  equ      b'01100011'
 ;number to show specific symbol
 led_minus     equ     0x14
 led_H         equ     0x19 
+led_S         equ     .19
 
 led_dot_pin   equ  7
 
