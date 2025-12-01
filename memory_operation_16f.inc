@@ -165,3 +165,29 @@ move_3bytes_into_3bytes macro sourceL, destinationL
 	BANKSEL destinationL
 	movwf  destinationL+2 
 	endm
+
+mem_cpy_FSR  macro sourceL, destinationL, temp_var, byte_number
+	LOCAL mem_cpy_FSR_loop
+
+mem_cpy_FSR_loop
+	BANKISEL sourceL
+	movlw   LOW sourceL
+	addwf   byte_number,w
+	movwf   FSR 
+	decf    FSR,f
+	movf    INDF,w 
+	movwf   temp_var  
+	BANKISEL destinationL
+	movlw   LOW destinationL
+	addwf   byte_number,w
+	movwf    FSR 
+	decf  FSR,f
+	movf   temp_var,w  
+	movwf    INDF 
+
+
+	decfsz  byte_number,f 
+	goto mem_cpy_FSR_loop
+
+
+	endm

@@ -362,7 +362,7 @@ ds18_req_id_read
          BANKSEL ds18_status
          btfss   ds18_status,ds18_init_ok 
          ;error no init finished properly
-         RETURN
+         retlw  1
          configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          
          BANKSEL ds18_command_to_be_send
@@ -399,7 +399,7 @@ ds18_req_id_read
          btfss    STATUS,Z         
          bsf ds18_status, ds18_crc_fault
          
-         return
+         retlw 0
 ;3 bytes have to be put into arguments
 ds18_req_scratchpad_write
         
