@@ -1,30 +1,58 @@
+;kucharski22daniel@gmail.com  2025
 ;to use this library
+;also use of math macros:
+;memeory_operation_16f.inc
+;math_hex_to_dec_1000.inc 
+;math_function_div.asm
 
+
+;setup following symbols
 ;port_ds1820
 ;   - has to be set
+
 ;tris_of_ds18b20_port
 ; - choose specific TRIS register
+
 ;port_pin_ds18b20
 ; - which pin
+
 ;ds18b20_tmr2_value_to_wait_480us
 ; PR2  -  value to pass 480us 
+
 ;ds18b20_tmr2_value_to_wait_60us
 ; PR2 to measure 60 us 
+
+
+
+;AND add defintion of following variables 
+;best will be to have them in same BANK
 ;ds18_status -
 ; different information about ds18 operation
+
 ;n_bit - counter to send data to ds18b20
+
 ;ds18_configuration 
 ; this holds information about power source 
+
 ;ds18_number_of_receive_bytes
 ; to hold number of bytes expected to be received
+
+;ds18_measured_temp
+;ds18_measured_temp_01
+;variables holds measured temperatures, fraction in ds18_measured_temp_01
+
 ;ds18_command_to_be_send
 ; variable should store command to be send
+
 ;ds18_TH 
 ;       variable to set user byte TH
+
 ;ds18_TL
 ;       variable to set user byte TL
+
 ;ds18_config_byte
 ;       variable holds config byte to be send to ds18b20
+
 ;ds18_expected_resolution
 ; set 9,10, 11, 12 
 
@@ -574,6 +602,39 @@ tab_fraction
         dt  9  ;  0.875
         dt  9  ;  0.9375
 
+;function to translate 
+;ds18_measured_temp
+;ds18_measured_temp_01 
+;into 4 digits
+; 125.9 
+;or negative
+; -54.9 (minus i 1000 number)
+;this could be suitable for led segments
+;or lcd alpahnumeric screens
+ds18_convert_dec_measurement_into_4_digits
+    BANKSEL ds18_measured_temp
+    movf   ds18_measured_temp,w 
+    movwf  number_l
+    clrf   number_h 
+
+    macro_16bits_into_N_dec  number_l, segment_digit1, 3
+    BANKSEL segment_digit1
+    movf segment_digit100,w 
+    movwf segment_digit1000
+    movf segment_digit10,w 
+    movwf segment_digit100
+    movf segment_digit1,w 
+    movwf segment_digit10
+    movf  ds18_measured_temp_01,w 
+    movwf segment_digit1
+
+    movlw led_minus
+    btfsc ds18_status,ds18_below_zero
+    movwf segment_digit1000
+
+    BANKSEL led_dot_display
+    bsf led_dot_display, light_dot10
+    return   
 
 petla_odbioru_rozkazu_1
         BANKSEL ds18_number_of_receive_bytes
@@ -626,12 +687,10 @@ czekam_na_kolejny_bit_DS_1
 
          return      
 
+;array with DS18b20 bytes scratchpad should be placed in FSR
 check_CRC_DS 
          BANKSEL ds8_CRC_result
          clrf  ds8_CRC_result
-         ;movlw    
-   
-;tablica danych DS18b20 musi byc w FSR2
 check_CRC_DS_loop
          movf INDF,w   
          incf   FSR,f
@@ -670,4 +729,4 @@ check_CRC_DS_loop
 
          return         
 
-;*********KOniec ds1820
+;*********END of ds1820 procedures

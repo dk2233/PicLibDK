@@ -141,19 +141,27 @@ check16bit_if_0_Z_skip_next_line_exit
 
 
 move_2bytes_into_2bytes macro sourceL, destinationL
-	BANKSEL destinationL
+	BANKSEL sourceL
 	movf sourceL,W
+	BANKSEL destinationL
 	movwf destinationL 
+	BANKSEL sourceL
 	movf sourceL+1, W 
+	BANKSEL destinationL
 	movwf  destinationL+1
 	endm
 
 move_3bytes_into_3bytes macro sourceL, destinationL
-	BANKSEL destinationL
+	BANKSEL sourceL
 	movf sourceL,W
+	BANKSEL destinationL
 	movwf destinationL 
+	BANKSEL sourceL
 	movf sourceL+1, W 
+	BANKSEL destinationL
 	movwf  destinationL+1 
+	BANKSEL sourceL
 	movf sourceL+2, W 
+	BANKSEL destinationL
 	movwf  destinationL+2 
 	endm
