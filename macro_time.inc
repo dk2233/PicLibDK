@@ -71,6 +71,13 @@ nops_loop
         goto     nops_loop ; 2 cycle
         endm
 
+;sometimes loops have to call something therefore just prepare a loop variable
+calculate_loop_number_to_reach_period_us   macro  mcu_freq, time_to_wait_us, one_loop_cycles
+        LOCAL number = .4 * .1000000
+number = time_to_wait_us * mcu_freq / number / one_loop_cycles         
+        movlw number
+        endm
+
 wait_until_tmr2_period_pass  macro 
         LOCAL  loop_wait_for_PIR_mark
 

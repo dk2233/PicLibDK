@@ -16,13 +16,6 @@
 ;port_pin_ds18b20
 ; - which pin
 
-;ds18b20_tmr2_value_to_wait_480us
-; PR2  -  value to pass 480us 
-
-;ds18b20_tmr2_value_to_wait_60us
-; PR2 to measure 60 us 
-
-
 
 ;AND add defintion of following variables 
 ;best will be to have them in same BANK
@@ -104,44 +97,24 @@ PIN_LO
         RETURN
 
 send_bit_1
-         BANKSEL TMR2
-         clrf     TMR2
-         bcf      PIR1,TMR2IF
          call     PIN_LO
          
          call     PIN_HI
 
-        BANKSEL   PIR1
-loop_send_bit1
-         btfss    PIR1,TMR2IF        
-         goto     loop_send_bit1
+        wait_specific_time_no_tmr_us   mcu_freq, .60, tmp7
          
          return
 
 send_bit_0
          call     PIN_LO         
-         BANKSEL  TMR2
-         clrf     TMR2
-         bcf      PIR1,TMR2IF
-         
-         BANKSEL  PIR1
-loop_send_bit_0
-         btfss    PIR1,TMR2IF        
-         goto     loop_send_bit_0
+        wait_specific_time_no_tmr_us   mcu_freq, .60, tmp7
          call     PIN_HI
          
          return
 
 check_ds_processing 
 
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
-    
-         BANKSEL PIE1 
-         bcf  PIE1,TMR2IE
-         BANKSEL TMR2
-         clrf TMR2
 conversion_busy         
-         bcf  PIR1,TMR2IF
 
          call PIN_LO
 
@@ -164,48 +137,42 @@ conversion_busy
 
 
 init_ds1820
-;wysyla 0 na linie danych do ds1820 przez 
-;inicjalizacja 0 na wyjsciu okolo 480us tzn dla ustawienia 1:2 
-;        dokladnie 256 z liczeniem TMR2 co 2, pozniej otwarcie portu na wejscie przejscie do 1 i po kilkunastu us otwarcie portu na wejscie
-;        powinien byc obecny sygnal 0 do okolo 240 us.
-;otwieram port na wyjscie
          BANKSEL   tris_of_ds18b20_port
          bcf      tris_of_ds18b20_port,port_pin_ds18b20
          
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_480us ; prescaler 1 , post 2
-         ;4/4e6 * 240 * 2 = 480 us
-         BANKSEL PIE1 
-         bcf  PIE1,TMR2IE
-         BANKSEL TMR2
-         clrf TMR2
-         bcf  PIR1,TMR2IF
-
          call     PIN_HI
          
          call     PIN_LO
 ;loop to wait until ds18b20 will finish
-        wait_until_tmr2_period_pass 
+        wait_specific_time_no_tmr_us  mcu_freq, .480, tmp7
 
 ;switch to receive data from DS18
          BANKSEL  tris_of_ds18b20_port
          bsf      tris_of_ds18b20_port,port_pin_ds18b20
          nop
-         BANKSEL  PIR1
-         bcf      PIR1,TMR2IF
 ;sprawdzam czy w ciagu 480us pojawilo sie 0 na porcie czujnika 
+        calculate_loop_number_to_reach_period_us  mcu_freq, .480, .4
+        movwf operandl
+        BANKSEL port_ds18b20
 init_ds1820_loop_wait_for_ds_out        
-         btfss    port_ds18b20,port_pin_ds18b20
+         btfss    port_ds18b20,port_pin_ds18b20 ;1
          goto     petla_inicjacji3
-         btfss    PIR1,TMR2IF
-         goto     init_ds1820_loop_wait_for_ds_out
+        
+         decfsz  operandl,f   ;1
+         goto     init_ds1820_loop_wait_for_ds_out ;2
 
          goto   init_ds1820_error
          
 petla_inicjacji3
-         btfsc    port_ds18b20,port_pin_ds18b20
+        calculate_loop_number_to_reach_period_us  mcu_freq, .480, .4
+        movwf  operandl
+        BANKSEL port_ds18b20
+ds18_init_loop3        
+         btfsc    port_ds18b20,port_pin_ds18b20 ;1
          goto     inicjacja_ok
-         btfss    PIR1,TMR2IF
-         goto     petla_inicjacji3
+
+         decfsz   operandl,f ;1
+         goto     petla_inicjacji3 ;2
 
 init_ds1820_error 
 ;error of ds18b20 initialization
@@ -219,8 +186,6 @@ inicjacja_ok
          bsf ds18_status, ds18_init_ok 
          bcf ds18_status,ds18_init_error
 
-        wait_until_tmr2_period_pass ; need to finish until 480us perios will finish
-
 init_ds1820_end         
         return 
          
@@ -228,8 +193,6 @@ init_ds1820_end
 
 
 ds18_req_temp_convert
-        
-         
          ;1. send request to measure temperature   0xcc 0x44
          ;2. wait about 1 sec
          ;3. send request to read temperature      0x33
@@ -241,14 +204,15 @@ ds18_req_temp_convert
          ;error no init finished properly
          RETURN
 
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          ;observed issues without critical section
+
          disable_all_isr
          movlw   DS18b20_skip_rom
          call     ds18_send_request_loop_send_byte_start
          
          movlw   DS18b20_temp_convert
          call     ds18_send_request_loop_send_byte_start
+
         enable_all_isr
          ;wait about  1 s - for 12 bit measurement it is 750 ms
          BANKSEL  ds18_status
@@ -271,7 +235,6 @@ ds18_req_scratchpad_read
          btfss   ds18_status,ds18_init_ok 
          ;error no init finished properly
          retlw  1
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          disable_all_isr 
          movlw    DS18b20_skip_rom
          call     ds18_send_request_loop_send_byte_start
@@ -318,7 +281,6 @@ ds18_read_power_supply
          btfss   ds18_status,ds18_init_ok 
          ;error no init finished properly
          RETURN
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          
          disable_all_isr
          movlw   DS18b20_skip_rom
@@ -363,7 +325,6 @@ ds18_req_id_read
          btfss   ds18_status,ds18_init_ok 
          ;error no init finished properly
          retlw  1
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          
          BANKSEL ds18_command_to_be_send
          movlw   DS18b20_read_rom
@@ -411,7 +372,6 @@ ds18_req_scratchpad_write
          btfss   ds18_status,ds18_init_ok 
          ;error no init finished properly
          retlw  1
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          disable_all_isr 
          movlw    DS18b20_skip_rom
          call     ds18_send_request_loop_send_byte_start
@@ -447,9 +407,6 @@ ds18_send_request_loop_send_byte_start
 
          BANKSEL  ds18_command_to_be_send
         movwf     ds18_command_to_be_send
-         BANKSEL   PIR1
-         clrf      TMR2
-         bcf      PIR1,TMR2IF
          movlw     8 ;send 8 bit of request byte
          movwf     n_bit
 ds18_send_request_loop_send_byte
@@ -641,19 +598,13 @@ petla_odbioru_rozkazu_1
          movf     ds18_number_of_receive_bytes,w
          movwf    tmp7
             
-         ;configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 4 , post 2
-         banksel TMR2
-         clrf     TMR2
-         bcf      PIR1,TMR2IF   
         
 ;procedura sprawdza czy ds1820 cos wysyla jezeli tak to sprawdza przez 60 us czy jest choc na chwile 0
 ;normalnie jezeli ds1820 nic nie wysyla to jest caly czas 1 bez rzadnych zmian
 petla_odbioru_z_ds1820_1
         movlw     8
         movwf     n_bit
-        clrf      TMR2
         clrf      INDF
-        bcf       PIR1,TMR2IF
         
 petla_stan_odebranego_bitu_1
          call     PIN_LO
@@ -670,13 +621,9 @@ petla_stan_odebranego_bitu_1
          btfsc    port_ds18b20,port_pin_ds18b20
          bsf      STATUS,C
          rrf     INDF,f
-         
-czekam_na_kolejny_bit_DS_1
-        btfss    PIR1,TMR2IF
-        goto      czekam_na_kolejny_bit_DS_1
-        
-        bcf       PIR1,TMR2IF
-        
+
+        wait_specific_time_no_tmr_us  mcu_freq, .50, operandl
+
         decfsz    n_bit,f
         goto      petla_stan_odebranego_bitu_1
         incf      FSR,f
