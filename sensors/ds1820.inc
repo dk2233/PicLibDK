@@ -57,6 +57,7 @@ ds18_conv_busy     equ     3
 ds18_wait_for_measurement   equ  4
 ds18_below_zero    equ    5
 ds18_precision_was_read  equ  6
+ds18_receive_byte_from_lsb    equ  7
 
 ;ds18_configuration
 ds18_parasite_power  equ   0
@@ -72,6 +73,7 @@ DS18b20_skip_rom     equ    0xCC
 DS18b20_temp_convert     equ    0x44
 DS18b20_read_scratchpad   equ   0xbe
 DS18b20_write_scratchpad  equ   0x4e
+DS18b20_search_rom        equ   0xf0
 
 ;config byte 
 
@@ -246,7 +248,7 @@ ds18_req_scratchpad_read
          movlw     LOW ds18_read_from_RAM
          movwf     FSR
          
-         call     petla_odbioru_rozkazu_1
+         call     ds18_receive_data_from_sensor
          ;observed issues without critical section
         enable_all_isr 
          
@@ -337,7 +339,7 @@ ds18_req_id_read
          movlw     LOW ds18_read_from_RAM
          movwf     FSR
          
-         call     petla_odbioru_rozkazu_1
+         call     ds18_receive_data_from_sensor
          
          enable_all_isr
          ;sprawdz CRC
@@ -361,6 +363,141 @@ ds18_req_id_read
          bsf ds18_status, ds18_crc_fault
          
          retlw 0
+
+;in operandl put state of bit to be set in ds18b20 id
+;in FSR id byte to be set
+ds18b20_set_id_bit_for_sensor
+        ;movf  ds18_number_of_sensors
+        ;movwf operandl 
+
+        BANKISEL   ds18_read_id_1
+        movlw LOW  ds18_read_id_1
+        BANKSEL   ds18_id_which_byte
+        addwf      ds18_id_which_byte,w
+        movwf      FSR         
+ds18b20_set_id_bit_for_all_sensors_loop
+        bcf    STATUS,C
+        movf   operandl,w ;if 0 than unset bit
+        SKPZ
+        bsf    STATUS,C
+        rrf    INDF,f 
+
+        ;movlw  8 
+        ;addwf FSR,f ;next sensor id same bit
+
+        ;decfsz  operandl,f
+        ;goto  ds18b20_set_id_bit_for_all_sensors_loop
+        return
+
+;this will search for id in rom of every sensors on the same line
+;it will read following possibilities:
+; 01 - means read bit of every connected sensors is 0
+; 10 - means n bit is 1 of every sensors
+; 11 - this is not possible - no device attached
+; 00 - this means connected sensors have conflicts on this bit position
+ds18_search_rom
+        BANKSEL ds18_number_of_sensors
+        movlw  0
+        movwf  ds18_number_of_sensors
+        movwf  ds18_received_id_byte_count
+
+         disable_all_isr 
+         call     init_ds1820
+         
+         BANKSEL ds18_status
+         btfss   ds18_status,ds18_init_ok 
+         ;error no init finished properly
+         retlw  1
+         
+         BANKSEL ds18_command_to_be_send
+         movlw   DS18b20_search_rom
+         movwf   ds18_command_to_be_send
+
+         call     ds18_send_request_loop_send_byte_start
+
+
+        BANKSEL  ds18_number_of_receive_bytes
+         movlw    8
+         movwf    ds18_number_of_receive_bytes
+         movwf    ds18_id_bit
+         clrf     ds18_id_which_byte
+
+;loop to read data
+         BANKSEL  ds18_status
+         bsf   ds18_status, ds18_receive_byte_from_lsb
+ds18_search_rom_loop_1_bit
+         BANKISEL  ds18_read_from_RAM
+         movlw     LOW ds18_read_from_RAM
+         movwf     FSR
+         clrf  INDF
+         movlw    2
+         movwf    n_bit  
+         call     ds18_receive_one_bit
+
+         ;now check result 
+         movlw  b'00000001' ; set bit 1 - this is 01 case
+         xorwf  INDF,w
+         SKPZ  
+         goto  ds18_search_rom_loop_1_bit_1
+         clrf  operandl
+         call ds18b20_set_id_bit_for_sensor
+         call   send_bit_0
+
+         goto ds18_search_rom_loop_1_bit_next
+
+         ;for how many ds sensors we have - all this bit set as 0
+
+ds18_search_rom_loop_1_bit_1
+         movlw  b'00000010'
+         xorwf  INDF,w
+         SKPZ 
+         goto ds18_search_rom_loop_1_bit_2
+         movlw 1 
+         movwf operandl
+         call ds18b20_set_id_bit_for_sensor
+         call send_bit_1  
+
+         ;for how many ds sensors we have - all this bit set as 1
+
+         goto ds18_search_rom_loop_1_bit_next
+ds18_search_rom_loop_1_bit_2
+         movlw  b'00000011'
+         xorwf  INDF,w 
+         SKPNZ
+         retlw  1 ; no ds responds with any bit - if first bit is 1 second should be complement 0
+
+         movlw  b'00000000' ;first bit is 0 that is becuase different sensors have 0 or 1 at this position - we do not know how many sensors we have
+         xorwf  INDF,w 
+         SKPZ 
+         ;what to do in case of bit conflicts ? 
+         goto    ds18_search_rom_loop_1_bit_next
+
+         
+ds18_search_rom_loop_1_bit_next
+
+        BANKSEL ds18_id_bit
+        decfsz   ds18_id_bit,f
+        goto  ds18_search_rom_loop_1_bit
+         
+        movlw  8
+        movwf  ds18_id_bit
+        incf  ds18_id_which_byte,f 
+
+        decfsz ds18_number_of_receive_bytes,f
+        goto ds18_search_rom_loop_1_bit 
+ds18_search_rom_OK_return
+         BANKSEL ds18_status
+         bcf   ds18_status, ds18_receive_byte_from_lsb
+         enable_all_isr
+
+        retlw 0
+
+ds18_search_rom_NOTOK_return
+         BANKSEL ds18_status
+         bcf   ds18_status, ds18_receive_byte_from_lsb
+         enable_all_isr
+
+        retlw 1
 ;3 bytes have to be put into arguments
 ds18_req_scratchpad_write
         
@@ -593,7 +730,7 @@ ds18_convert_dec_measurement_into_4_digits
     bsf led_dot_display, light_dot10
     return   
 
-petla_odbioru_rozkazu_1
+ds18_receive_data_from_sensor
         BANKSEL ds18_number_of_receive_bytes
          movf     ds18_number_of_receive_bytes,w
          movwf    tmp7
@@ -605,8 +742,20 @@ petla_odbioru_z_ds1820_1
         movlw     8
         movwf     n_bit
         clrf      INDF
+
+        call   ds18_receive_one_bit
+
+        incf      FSR,f
         
-petla_stan_odebranego_bitu_1
+        BANKSEL tmp7
+;czy juz przeszly wszystkie bajty z DS
+        decfsz    tmp7,f
+        goto      petla_odbioru_z_ds1820_1
+
+         return      
+
+        
+ds18_receive_one_bit
          call     PIN_LO
         
 
@@ -620,19 +769,18 @@ petla_stan_odebranego_bitu_1
          bcf      STATUS,C
          btfsc    port_ds18b20,port_pin_ds18b20
          bsf      STATUS,C
+         BANKSEL ds18_status
+         btfss  ds18_status,ds18_receive_byte_from_lsb
          rrf     INDF,f
+         btfsc  ds18_status,ds18_receive_byte_from_lsb
+         rlf    INDF,f
 
         wait_specific_time_no_tmr_us  mcu_freq, .50, operandl
 
         decfsz    n_bit,f
-        goto      petla_stan_odebranego_bitu_1
-        incf      FSR,f
-        
-;czy juz przeszly wszystkie bajty z DS
-        decfsz    tmp7,f
-        goto      petla_odbioru_z_ds1820_1
+        goto      ds18_receive_one_bit
+        return 
 
-         return      
 
 ;array with DS18b20 bytes scratchpad should be placed in FSR
 check_CRC_DS 
