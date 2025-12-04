@@ -62,6 +62,7 @@ ds18_receive_byte_from_lsb    equ  7
 ;ds18_configuration
 ds18_parasite_power  equ   0
 ds18_normal_power    equ   1 
+ds18_multiple_sensors  equ  2
 
 DS18B20_TH_byte      equ    2 
 DS18B20_TL_byte      equ    3 
@@ -70,6 +71,8 @@ DS18B20_offset_of_config_byte   equ  4
 DS18b20_read_rom     equ 0x33
 DS18b20_read_power_supply  equ   0xb4
 DS18b20_skip_rom     equ    0xCC
+DS18b20_match_rom     equ    0x55
+
 DS18b20_temp_convert     equ    0x44
 DS18b20_read_scratchpad   equ   0xbe
 DS18b20_write_scratchpad  equ   0x4e
@@ -80,6 +83,7 @@ DS18b20_search_rom        equ   0xf0
 DS18B20_config_R0    equ  5
 DS18B20_resolution_mask   equ    b'10011111'
 DS18B20_low_resolution  equ 9
+DS18B20_id_size         equ 8 
 
 ;*                                  *************************POLecenie DS1820
 ; in this procedure TMR2 is used for DS18B20 driver
@@ -191,7 +195,34 @@ inicjacja_ok
 init_ds1820_end         
         return 
          
-             
+ds18_match_or_skip_rom 
+        BANKSEL ds18_configuration
+         btfss   ds18_configuration, ds18_multiple_sensors
+         goto    ds18_match_or_skip_rom_skip
+
+         movlw   DS18b20_match_rom
+         call  ds18_send_request_loop_send_byte_start
+
+         ;ds18 id is in FSR
+         movlw  8
+         BANKSEL ds18_number_of_bytes
+         movwf ds18_number_of_bytes
+ds18_send_id 
+         movf  INDF,w 
+         call  ds18_send_request_loop_send_byte_start
+        INCF FSR,f
+        BANKSEL ds18_number_of_bytes
+        decfsz  ds18_number_of_bytes,f 
+        goto ds18_send_id
+
+        return
+
+
+
+ds18_match_or_skip_rom_skip
+         movlw   DS18b20_skip_rom
+         call     ds18_send_request_loop_send_byte_start
+        return
 
 
 ds18_req_temp_convert
@@ -209,9 +240,9 @@ ds18_req_temp_convert
          ;observed issues without critical section
 
          disable_all_isr
-         movlw   DS18b20_skip_rom
-         call     ds18_send_request_loop_send_byte_start
-         
+
+         call ds18_match_or_skip_rom
+
          movlw   DS18b20_temp_convert
          call     ds18_send_request_loop_send_byte_start
 
@@ -238,8 +269,7 @@ ds18_req_scratchpad_read
          ;error no init finished properly
          retlw  1
          disable_all_isr 
-         movlw    DS18b20_skip_rom
-         call     ds18_send_request_loop_send_byte_start
+         call ds18_match_or_skip_rom
          
          movlw    DS18b20_read_scratchpad
          call     ds18_send_request_loop_send_byte_start
@@ -285,8 +315,7 @@ ds18_read_power_supply
          RETURN
          
          disable_all_isr
-         movlw   DS18b20_skip_rom
-         call     ds18_send_request_loop_send_byte_start
+         call ds18_match_or_skip_rom
          
          movlw   DS18b20_read_power_supply
          call     ds18_send_request_loop_send_byte_start
@@ -316,6 +345,8 @@ ds18_read_power_supply_parasite
         bcf  ds18_configuration, ds18_normal_power
         return 
 
+
+;can only be used when only one ds connected
 ds18_req_id_read
         BANKSEL  ds18_number_of_receive_bytes
          movlw    8
@@ -389,6 +420,19 @@ ds18b20_set_id_bit_for_all_sensors_loop
         ;goto  ds18b20_set_id_bit_for_all_sensors_loop
         return
 
+
+ds18_search_rom_all_sensors
+
+        call ds18_search_rom 
+        ;increment sensors number if return is 0 
+        movf result_ll,w 
+        SKPZ 
+        BANKSEL ds18_number_of_sensors
+        incf  ds18_number_of_sensors,f 
+        ;check if no more bit was in conflicts
+        return 
+
+
 ;this will search for id in rom of every sensors on the same line
 ;it will read following possibilities:
 ; 01 - means read bit of every connected sensors is 0
@@ -397,9 +441,8 @@ ds18b20_set_id_bit_for_all_sensors_loop
 ; 00 - this means connected sensors have conflicts on this bit position
 ds18_search_rom
         BANKSEL ds18_number_of_sensors
-        movlw  0
-        movwf  ds18_number_of_sensors
-        movwf  ds18_received_id_byte_count
+        clrf  ds18_number_of_sensors
+        clrf  ds18_received_id_bit_count
 
          disable_all_isr 
          call     init_ds1820
@@ -434,6 +477,8 @@ ds18_search_rom_loop_1_bit
          movwf    n_bit  
          call     ds18_receive_one_bit
 
+        BANKSEL ds18_received_id_bit_count
+         incf ds18_received_id_bit_count,f
          ;now check result 
          movlw  b'00000001' ; set bit 1 - this is 01 case
          xorwf  INDF,w
@@ -469,7 +514,53 @@ ds18_search_rom_loop_1_bit_2
          movlw  b'00000000' ;first bit is 0 that is becuase different sensors have 0 or 1 at this position - we do not know how many sensors we have
          xorwf  INDF,w 
          SKPZ 
-         ;what to do in case of bit conflicts ? 
+         ;what to do in case of bit conflicts ?
+        BANKSEL ds18_received_id_bit_count
+         incf ds18_number_of_sensors_to_be_found,f 
+         
+         ;check if this bit was already set which means 0 was set to this one previously - now set 1
+         m_find_value_position_on_stack stack_of_differences, stack_sp, ds18_received_id_bit_count, operandl
+
+         ;check what is in Wreg 
+         movwf result_ll 
+         xorwf STACK_VALUE_NOT_FOUND,w 
+         SKPNZ 
+         goto ds18_search_rom_loop_00_push_to_stack
+
+         ;and if this last one result == sp
+         movf  result_ll, w 
+         BANKSEL stack_sp
+         xorwf stack_sp, w 
+         SKPNZ
+         goto ds18_search_rom_loop_00_last_bit_number_on_stack_no_more_send_1 
+         
+         ;send 0 
+
+         clrf operandl
+         call ds18b20_set_id_bit_for_sensor
+         call send_bit_0
+         goto ds18_search_rom_loop_1_bit_next
+
+         ;check if this is the last conflct on stack 
+
+ds18_search_rom_loop_00_last_bit_number_on_stack_no_more_send_1
+        movlw  1
+         movwf operandl
+         call ds18b20_set_id_bit_for_sensor
+         call send_bit_1  
+         ;no more possibilities on this bit - remove from stack
+         m_pop_stack stack_of_differences, stack_sp
+         goto ds18_search_rom_loop_1_bit_next
+
+ds18_search_rom_loop_00_push_to_stack
+         ;if not 
+         m_push_to_stack stack_of_differences, stack_sp, ds18_received_id_bit_count
+         ;and send  
+         clrf operandl
+         call ds18b20_set_id_bit_for_sensor
+         call send_bit_0
+         
+
          goto    ds18_search_rom_loop_1_bit_next
 
          
@@ -485,6 +576,7 @@ ds18_search_rom_loop_1_bit_next
 
         decfsz ds18_number_of_receive_bytes,f
         goto ds18_search_rom_loop_1_bit 
+        incf  ds18_number_of_sensors,f 
 ds18_search_rom_OK_return
          BANKSEL ds18_status
          bcf   ds18_status, ds18_receive_byte_from_lsb
@@ -510,8 +602,7 @@ ds18_req_scratchpad_write
          ;error no init finished properly
          retlw  1
          disable_all_isr 
-         movlw    DS18b20_skip_rom
-         call     ds18_send_request_loop_send_byte_start
+         call ds18_match_or_skip_rom
          
          movlw    DS18b20_write_scratchpad
          call     ds18_send_request_loop_send_byte_start
@@ -669,6 +760,7 @@ convert_temperature_positive
         ;1/16  ,  1/8,   1/4 ,   1/2
         ;this information is read every time srachtpad is read with 0xBE command
         call  tab_fraction
+        BANKSEL ds18_measured_temp
         movwf ds18_measured_temp_01
 
          return

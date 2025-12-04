@@ -320,6 +320,9 @@ refresh_led_not_0
         BANKSEL led_state
          bcf      led_state,previous_0
         
+         movlw HIGH tab_cyfr
+         BANKSEL  PCLATH 
+         movwf  PCLATH
          movf     INDF,w   
          PAGESEL  tab_cyfr
          call     tab_cyfr
