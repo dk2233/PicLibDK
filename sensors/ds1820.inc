@@ -16,13 +16,6 @@
 ;port_pin_ds18b20
 ; - which pin
 
-;ds18b20_tmr2_value_to_wait_480us
-; PR2  -  value to pass 480us 
-
-;ds18b20_tmr2_value_to_wait_60us
-; PR2 to measure 60 us 
-
-
 
 ;AND add defintion of following variables 
 ;best will be to have them in same BANK
@@ -64,10 +57,12 @@ ds18_conv_busy     equ     3
 ds18_wait_for_measurement   equ  4
 ds18_below_zero    equ    5
 ds18_precision_was_read  equ  6
+ds18_receive_byte_from_lsb    equ  7
 
 ;ds18_configuration
 ds18_parasite_power  equ   0
 ds18_normal_power    equ   1 
+ds18_multiple_sensors  equ  2
 
 DS18B20_TH_byte      equ    2 
 DS18B20_TL_byte      equ    3 
@@ -76,15 +71,19 @@ DS18B20_offset_of_config_byte   equ  4
 DS18b20_read_rom     equ 0x33
 DS18b20_read_power_supply  equ   0xb4
 DS18b20_skip_rom     equ    0xCC
+DS18b20_match_rom     equ    0x55
+
 DS18b20_temp_convert     equ    0x44
 DS18b20_read_scratchpad   equ   0xbe
 DS18b20_write_scratchpad  equ   0x4e
+DS18b20_search_rom        equ   0xf0
 
 ;config byte 
 
 DS18B20_config_R0    equ  5
 DS18B20_resolution_mask   equ    b'10011111'
 DS18B20_low_resolution  equ 9
+DS18B20_id_size         equ 8 
 
 ;*                                  *************************POLecenie DS1820
 ; in this procedure TMR2 is used for DS18B20 driver
@@ -104,44 +103,24 @@ PIN_LO
         RETURN
 
 send_bit_1
-         BANKSEL TMR2
-         clrf     TMR2
-         bcf      PIR1,TMR2IF
          call     PIN_LO
          
          call     PIN_HI
 
-        BANKSEL   PIR1
-loop_send_bit1
-         btfss    PIR1,TMR2IF        
-         goto     loop_send_bit1
+        wait_specific_time_no_tmr_us   mcu_freq, .60, tmp7
          
          return
 
 send_bit_0
          call     PIN_LO         
-         BANKSEL  TMR2
-         clrf     TMR2
-         bcf      PIR1,TMR2IF
-         
-         BANKSEL  PIR1
-loop_send_bit_0
-         btfss    PIR1,TMR2IF        
-         goto     loop_send_bit_0
+        wait_specific_time_no_tmr_us   mcu_freq, .60, tmp7
          call     PIN_HI
          
          return
 
 check_ds_processing 
 
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
-    
-         BANKSEL PIE1 
-         bcf  PIE1,TMR2IE
-         BANKSEL TMR2
-         clrf TMR2
 conversion_busy         
-         bcf  PIR1,TMR2IF
 
          call PIN_LO
 
@@ -164,48 +143,42 @@ conversion_busy
 
 
 init_ds1820
-;wysyla 0 na linie danych do ds1820 przez 
-;inicjalizacja 0 na wyjsciu okolo 480us tzn dla ustawienia 1:2 
-;        dokladnie 256 z liczeniem TMR2 co 2, pozniej otwarcie portu na wejscie przejscie do 1 i po kilkunastu us otwarcie portu na wejscie
-;        powinien byc obecny sygnal 0 do okolo 240 us.
-;otwieram port na wyjscie
          BANKSEL   tris_of_ds18b20_port
          bcf      tris_of_ds18b20_port,port_pin_ds18b20
          
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_480us ; prescaler 1 , post 2
-         ;4/4e6 * 240 * 2 = 480 us
-         BANKSEL PIE1 
-         bcf  PIE1,TMR2IE
-         BANKSEL TMR2
-         clrf TMR2
-         bcf  PIR1,TMR2IF
-
          call     PIN_HI
          
          call     PIN_LO
 ;loop to wait until ds18b20 will finish
-        wait_until_tmr2_period_pass 
+        wait_specific_time_no_tmr_us  mcu_freq, .480, tmp7
 
 ;switch to receive data from DS18
          BANKSEL  tris_of_ds18b20_port
          bsf      tris_of_ds18b20_port,port_pin_ds18b20
          nop
-         BANKSEL  PIR1
-         bcf      PIR1,TMR2IF
 ;sprawdzam czy w ciagu 480us pojawilo sie 0 na porcie czujnika 
+        calculate_loop_number_to_reach_period_us  mcu_freq, .480, .4
+        movwf operandl
+        BANKSEL port_ds18b20
 init_ds1820_loop_wait_for_ds_out        
-         btfss    port_ds18b20,port_pin_ds18b20
+         btfss    port_ds18b20,port_pin_ds18b20 ;1
          goto     petla_inicjacji3
-         btfss    PIR1,TMR2IF
-         goto     init_ds1820_loop_wait_for_ds_out
+        
+         decfsz  operandl,f   ;1
+         goto     init_ds1820_loop_wait_for_ds_out ;2
 
          goto   init_ds1820_error
          
 petla_inicjacji3
-         btfsc    port_ds18b20,port_pin_ds18b20
+        calculate_loop_number_to_reach_period_us  mcu_freq, .480, .4
+        movwf  operandl
+        BANKSEL port_ds18b20
+ds18_init_loop3        
+         btfsc    port_ds18b20,port_pin_ds18b20 ;1
          goto     inicjacja_ok
-         btfss    PIR1,TMR2IF
-         goto     petla_inicjacji3
+
+         decfsz   operandl,f ;1
+         goto     petla_inicjacji3 ;2
 
 init_ds1820_error 
 ;error of ds18b20 initialization
@@ -219,17 +192,40 @@ inicjacja_ok
          bsf ds18_status, ds18_init_ok 
          bcf ds18_status,ds18_init_error
 
-        wait_until_tmr2_period_pass ; need to finish until 480us perios will finish
-
 init_ds1820_end         
         return 
          
-             
+ds18_match_or_skip_rom 
+        BANKSEL ds18_configuration
+         btfss   ds18_configuration, ds18_multiple_sensors
+         goto    ds18_match_or_skip_rom_skip
+
+         movlw   DS18b20_match_rom
+         call  ds18_send_request_loop_send_byte_start
+
+         ;ds18 id is in FSR
+         movlw  8
+         BANKSEL ds18_number_of_bytes
+         movwf ds18_number_of_bytes
+ds18_send_id 
+         movf  INDF,w 
+         call  ds18_send_request_loop_send_byte_start
+        INCF FSR,f
+        BANKSEL ds18_number_of_bytes
+        decfsz  ds18_number_of_bytes,f 
+        goto ds18_send_id
+
+        return
+
+
+
+ds18_match_or_skip_rom_skip
+         movlw   DS18b20_skip_rom
+         call     ds18_send_request_loop_send_byte_start
+        return
 
 
 ds18_req_temp_convert
-        
-         
          ;1. send request to measure temperature   0xcc 0x44
          ;2. wait about 1 sec
          ;3. send request to read temperature      0x33
@@ -241,14 +237,15 @@ ds18_req_temp_convert
          ;error no init finished properly
          RETURN
 
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          ;observed issues without critical section
+
          disable_all_isr
-         movlw   DS18b20_skip_rom
-         call     ds18_send_request_loop_send_byte_start
-         
+
+         call ds18_match_or_skip_rom
+
          movlw   DS18b20_temp_convert
          call     ds18_send_request_loop_send_byte_start
+
         enable_all_isr
          ;wait about  1 s - for 12 bit measurement it is 750 ms
          BANKSEL  ds18_status
@@ -271,10 +268,8 @@ ds18_req_scratchpad_read
          btfss   ds18_status,ds18_init_ok 
          ;error no init finished properly
          retlw  1
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          disable_all_isr 
-         movlw    DS18b20_skip_rom
-         call     ds18_send_request_loop_send_byte_start
+         call ds18_match_or_skip_rom
          
          movlw    DS18b20_read_scratchpad
          call     ds18_send_request_loop_send_byte_start
@@ -283,7 +278,7 @@ ds18_req_scratchpad_read
          movlw     LOW ds18_read_from_RAM
          movwf     FSR
          
-         call     petla_odbioru_rozkazu_1
+         call     ds18_receive_data_from_sensor
          ;observed issues without critical section
         enable_all_isr 
          
@@ -318,11 +313,9 @@ ds18_read_power_supply
          btfss   ds18_status,ds18_init_ok 
          ;error no init finished properly
          RETURN
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          
          disable_all_isr
-         movlw   DS18b20_skip_rom
-         call     ds18_send_request_loop_send_byte_start
+         call ds18_match_or_skip_rom
          
          movlw   DS18b20_read_power_supply
          call     ds18_send_request_loop_send_byte_start
@@ -352,6 +345,8 @@ ds18_read_power_supply_parasite
         bcf  ds18_configuration, ds18_normal_power
         return 
 
+
+;can only be used when only one ds connected
 ds18_req_id_read
         BANKSEL  ds18_number_of_receive_bytes
          movlw    8
@@ -362,8 +357,7 @@ ds18_req_id_read
          BANKSEL ds18_status
          btfss   ds18_status,ds18_init_ok 
          ;error no init finished properly
-         RETURN
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
+         retlw  1
          
          BANKSEL ds18_command_to_be_send
          movlw   DS18b20_read_rom
@@ -376,7 +370,7 @@ ds18_req_id_read
          movlw     LOW ds18_read_from_RAM
          movwf     FSR
          
-         call     petla_odbioru_rozkazu_1
+         call     ds18_receive_data_from_sensor
          
          enable_all_isr
          ;sprawdz CRC
@@ -399,7 +393,219 @@ ds18_req_id_read
          btfss    STATUS,Z         
          bsf ds18_status, ds18_crc_fault
          
-         return
+         retlw 0
+
+;in operandl put state of bit to be set in ds18b20 id
+;in FSR id byte to be set
+ds18b20_set_id_bit_for_sensor
+        ;movf  ds18_number_of_sensors
+        ;movwf operandl 
+
+        BANKISEL   ds18_read_id_1
+        movlw LOW  ds18_read_id_1
+        BANKSEL   ds18_id_which_byte
+        addwf      ds18_id_which_byte,w
+        addwf      ds18_id_RAM_offset,w 
+        movwf      FSR         
+
+ds18b20_set_id_bit_for_all_sensors_loop
+        bcf    STATUS,C
+        movf   operandl,w ;if 0 than unset bit
+        SKPZ
+        bsf    STATUS,C
+        rrf    INDF,f 
+
+        ;movlw  8 
+        ;addwf FSR,f ;next sensor id same bit
+
+        ;decfsz  operandl,f
+        ;goto  ds18b20_set_id_bit_for_all_sensors_loop
+        return
+
+
+ds18_search_rom_all_sensors
+
+        BANKSEL ds18_number_of_sensors
+        clrf  ds18_number_of_sensors
+
+         disable_all_isr 
+ds18_search_rom_all_sensors_loop         
+        call ds18_search_rom 
+        movwf result_ll
+        ;increment sensors number if return is 0 
+        movf result_ll,w 
+        SKPZ 
+        goto ds18_search_rom_all_sensors_exit
+        movlw  DS18B20_id_size
+        BANKSEL ds18_id_RAM_offset
+        addwf  ds18_id_RAM_offset,f
+        BANKSEL stack_sp
+        ;check if anything is still on stack differences
+        movf  stack_sp,w 
+        SKPZ
+        goto ds18_search_rom_all_sensors_loop
+        ;check if no more bit was in conflicts
+ds18_search_rom_all_sensors_exit
+        enable_all_isr
+        return 
+
+
+;this will search for id in rom of every sensors on the same line
+;it will read following possibilities:
+; 01 - means read bit of every connected sensors is 0
+; 10 - means n bit is 1 of every sensors
+; 11 - this is not possible - no device attached
+; 00 - this means connected sensors have conflicts on this bit position
+ds18_search_rom
+        BANKSEL ds18_received_id_bit_count
+        clrf  ds18_received_id_bit_count
+         call     init_ds1820
+         
+         BANKSEL ds18_status
+         btfss   ds18_status,ds18_init_ok 
+         goto ds18_search_rom_NOTOK_return
+         ;error no init finished properly
+         
+         BANKSEL ds18_command_to_be_send
+         movlw   DS18b20_search_rom
+         movwf   ds18_command_to_be_send
+
+         call     ds18_send_request_loop_send_byte_start
+
+
+        BANKSEL  ds18_number_of_receive_bytes
+         movlw    8
+         movwf    ds18_number_of_receive_bytes
+         movwf    ds18_id_bit
+         clrf     ds18_id_which_byte
+
+;loop to read data
+         BANKSEL  ds18_status
+         bsf   ds18_status, ds18_receive_byte_from_lsb
+ds18_search_rom_loop_1_bit
+         BANKISEL  ds18_read_from_RAM
+         movlw     LOW ds18_read_from_RAM
+         movwf     FSR
+         clrf  INDF
+         movlw    2
+         movwf    n_bit  
+         call     ds18_receive_one_bit
+
+        BANKSEL ds18_received_id_bit_count
+         incf ds18_received_id_bit_count,f
+         movlw  b'00000011'
+         xorwf  INDF,w 
+         SKPNZ
+         ;retlw  1 ; no ds responds with any bit - if first bit is 1 second should be complement 0
+         goto  ds18_search_rom_NOTOK_return
+         ;now check result 
+         movlw  b'00000001' ; set bit 1 - this is 01 case
+         xorwf  INDF,w
+         SKPZ  
+         goto  ds18_search_rom_loop_1_bit_1
+         clrf  operandl
+         call ds18b20_set_id_bit_for_sensor
+         call   send_bit_0
+
+         goto ds18_search_rom_loop_1_bit_next
+
+         ;for how many ds sensors we have - all this bit set as 0
+
+ds18_search_rom_loop_1_bit_1
+         movlw  b'00000010'
+         xorwf  INDF,w
+         SKPZ 
+         goto ds18_search_rom_loop_1_bit_2
+         movlw 1 
+         movwf operandl
+         call ds18b20_set_id_bit_for_sensor
+         call send_bit_1  
+
+         ;for how many ds sensors we have - all this bit set as 1
+
+         goto ds18_search_rom_loop_1_bit_next
+
+ds18_search_rom_loop_1_bit_2
+         movlw  b'00000000' ;first bit is 0 that is becuase different sensors have 0 or 1 at this position - we do not know how many sensors we have
+         xorwf  INDF,w 
+         SKPZ 
+         goto ds18_search_rom_loop_1_bit_2
+         ;check if this bit was already set which means 0 was set to this one previously - now set 1
+         m_find_value_position_on_stack stack_of_differences, stack_sp, ds18_received_id_bit_count, operandl
+
+         ;check what is in Wreg 
+         movwf result_ll 
+         xorwf STACK_VALUE_NOT_FOUND,w 
+         SKPNZ 
+         goto ds18_search_rom_loop_00_push_to_stack
+
+         ;and if this last one result == sp
+         movf  result_ll, w 
+         BANKSEL stack_sp
+         xorwf stack_sp, w 
+         SKPNZ
+         goto ds18_search_rom_loop_00_last_bit_number_on_stack_no_more_send_1 
+         
+         ;send 0 
+
+         clrf operandl
+         call ds18b20_set_id_bit_for_sensor
+         call send_bit_0
+         goto ds18_search_rom_loop_1_bit_next
+
+         ;check if this is the last conflct on stack 
+
+ds18_search_rom_loop_00_last_bit_number_on_stack_no_more_send_1
+        movlw  1
+         movwf operandl
+         call ds18b20_set_id_bit_for_sensor
+         call send_bit_1  
+         ;no more possibilities on this bit - remove from stack
+         m_pop_stack stack_of_differences, stack_sp
+         goto ds18_search_rom_loop_1_bit_next
+
+ds18_search_rom_loop_00_push_to_stack
+         ;if not 
+         m_push_to_stack stack_of_differences, stack_sp, ds18_received_id_bit_count
+         ;and send  
+         clrf operandl
+         call ds18b20_set_id_bit_for_sensor
+         call send_bit_0
+         
+
+         goto    ds18_search_rom_loop_1_bit_next
+
+         
+ds18_search_rom_loop_1_bit_next
+
+        BANKSEL ds18_id_bit
+        decfsz   ds18_id_bit,f
+        goto  ds18_search_rom_loop_1_bit
+         
+        movlw  8
+        movwf  ds18_id_bit
+        incf  ds18_id_which_byte,f 
+
+        decfsz ds18_number_of_receive_bytes,f
+        goto ds18_search_rom_loop_1_bit 
+        incf  ds18_number_of_sensors,f 
+
+        goto  ds18_search_rom_OK_return
+
+        ;run another iteration
+
+
+ds18_search_rom_OK_return
+         BANKSEL ds18_status
+         bcf   ds18_status, ds18_receive_byte_from_lsb
+
+        retlw 0
+
+ds18_search_rom_NOTOK_return
+         BANKSEL ds18_status
+         bcf   ds18_status, ds18_receive_byte_from_lsb
+
+        retlw 1
 ;3 bytes have to be put into arguments
 ds18_req_scratchpad_write
         
@@ -411,10 +617,8 @@ ds18_req_scratchpad_write
          btfss   ds18_status,ds18_init_ok 
          ;error no init finished properly
          retlw  1
-         configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 1 , post 2
          disable_all_isr 
-         movlw    DS18b20_skip_rom
-         call     ds18_send_request_loop_send_byte_start
+         call ds18_match_or_skip_rom
          
          movlw    DS18b20_write_scratchpad
          call     ds18_send_request_loop_send_byte_start
@@ -447,9 +651,6 @@ ds18_send_request_loop_send_byte_start
 
          BANKSEL  ds18_command_to_be_send
         movwf     ds18_command_to_be_send
-         BANKSEL   PIR1
-         clrf      TMR2
-         bcf      PIR1,TMR2IF
          movlw     8 ;send 8 bit of request byte
          movwf     n_bit
 ds18_send_request_loop_send_byte
@@ -575,6 +776,7 @@ convert_temperature_positive
         ;1/16  ,  1/8,   1/4 ,   1/2
         ;this information is read every time srachtpad is read with 0xBE command
         call  tab_fraction
+        BANKSEL ds18_measured_temp
         movwf ds18_measured_temp_01
 
          return
@@ -636,26 +838,32 @@ ds18_convert_dec_measurement_into_4_digits
     bsf led_dot_display, light_dot10
     return   
 
-petla_odbioru_rozkazu_1
+ds18_receive_data_from_sensor
         BANKSEL ds18_number_of_receive_bytes
          movf     ds18_number_of_receive_bytes,w
          movwf    tmp7
             
-         ;configure_tmr2 0 , 1, ds18b20_tmr2_value_to_wait_60us ; prescaler 4 , post 2
-         banksel TMR2
-         clrf     TMR2
-         bcf      PIR1,TMR2IF   
         
 ;procedura sprawdza czy ds1820 cos wysyla jezeli tak to sprawdza przez 60 us czy jest choc na chwile 0
 ;normalnie jezeli ds1820 nic nie wysyla to jest caly czas 1 bez rzadnych zmian
 petla_odbioru_z_ds1820_1
         movlw     8
         movwf     n_bit
-        clrf      TMR2
         clrf      INDF
-        bcf       PIR1,TMR2IF
+
+        call   ds18_receive_one_bit
+
+        incf      FSR,f
         
-petla_stan_odebranego_bitu_1
+        BANKSEL tmp7
+;czy juz przeszly wszystkie bajty z DS
+        decfsz    tmp7,f
+        goto      petla_odbioru_z_ds1820_1
+
+         return      
+
+        
+ds18_receive_one_bit
          call     PIN_LO
         
 
@@ -669,23 +877,18 @@ petla_stan_odebranego_bitu_1
          bcf      STATUS,C
          btfsc    port_ds18b20,port_pin_ds18b20
          bsf      STATUS,C
+         BANKSEL ds18_status
+         btfss  ds18_status,ds18_receive_byte_from_lsb
          rrf     INDF,f
-         
-czekam_na_kolejny_bit_DS_1
-        btfss    PIR1,TMR2IF
-        goto      czekam_na_kolejny_bit_DS_1
-        
-        bcf       PIR1,TMR2IF
-        
-        decfsz    n_bit,f
-        goto      petla_stan_odebranego_bitu_1
-        incf      FSR,f
-        
-;czy juz przeszly wszystkie bajty z DS
-        decfsz    tmp7,f
-        goto      petla_odbioru_z_ds1820_1
+         btfsc  ds18_status,ds18_receive_byte_from_lsb
+         rlf    INDF,f
 
-         return      
+        wait_specific_time_no_tmr_us  mcu_freq, .50, operandl
+
+        decfsz    n_bit,f
+        goto      ds18_receive_one_bit
+        return 
+
 
 ;array with DS18b20 bytes scratchpad should be placed in FSR
 check_CRC_DS 
