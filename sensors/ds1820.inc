@@ -405,7 +405,9 @@ ds18b20_set_id_bit_for_sensor
         movlw LOW  ds18_read_id_1
         BANKSEL   ds18_id_which_byte
         addwf      ds18_id_which_byte,w
+        addwf      ds18_id_RAM_offset,w 
         movwf      FSR         
+
 ds18b20_set_id_bit_for_all_sensors_loop
         bcf    STATUS,C
         movf   operandl,w ;if 0 than unset bit
@@ -423,13 +425,28 @@ ds18b20_set_id_bit_for_all_sensors_loop
 
 ds18_search_rom_all_sensors
 
+        BANKSEL ds18_number_of_sensors
+        clrf  ds18_number_of_sensors
+
+         disable_all_isr 
+ds18_search_rom_all_sensors_loop         
         call ds18_search_rom 
+        movwf result_ll
         ;increment sensors number if return is 0 
         movf result_ll,w 
         SKPZ 
-        BANKSEL ds18_number_of_sensors
-        incf  ds18_number_of_sensors,f 
+        goto ds18_search_rom_all_sensors_exit
+        movlw  DS18B20_id_size
+        BANKSEL ds18_id_RAM_offset
+        addwf  ds18_id_RAM_offset,f
+        BANKSEL stack_sp
+        ;check if anything is still on stack differences
+        movf  stack_sp,w 
+        SKPZ
+        goto ds18_search_rom_all_sensors_loop
         ;check if no more bit was in conflicts
+ds18_search_rom_all_sensors_exit
+        enable_all_isr
         return 
 
 
@@ -440,17 +457,14 @@ ds18_search_rom_all_sensors
 ; 11 - this is not possible - no device attached
 ; 00 - this means connected sensors have conflicts on this bit position
 ds18_search_rom
-        BANKSEL ds18_number_of_sensors
-        clrf  ds18_number_of_sensors
+        BANKSEL ds18_received_id_bit_count
         clrf  ds18_received_id_bit_count
-
-         disable_all_isr 
          call     init_ds1820
          
          BANKSEL ds18_status
          btfss   ds18_status,ds18_init_ok 
+         goto ds18_search_rom_NOTOK_return
          ;error no init finished properly
-         retlw  1
          
          BANKSEL ds18_command_to_be_send
          movlw   DS18b20_search_rom
@@ -479,6 +493,11 @@ ds18_search_rom_loop_1_bit
 
         BANKSEL ds18_received_id_bit_count
          incf ds18_received_id_bit_count,f
+         movlw  b'00000011'
+         xorwf  INDF,w 
+         SKPNZ
+         ;retlw  1 ; no ds responds with any bit - if first bit is 1 second should be complement 0
+         goto  ds18_search_rom_NOTOK_return
          ;now check result 
          movlw  b'00000001' ; set bit 1 - this is 01 case
          xorwf  INDF,w
@@ -505,19 +524,12 @@ ds18_search_rom_loop_1_bit_1
          ;for how many ds sensors we have - all this bit set as 1
 
          goto ds18_search_rom_loop_1_bit_next
-ds18_search_rom_loop_1_bit_2
-         movlw  b'00000011'
-         xorwf  INDF,w 
-         SKPNZ
-         retlw  1 ; no ds responds with any bit - if first bit is 1 second should be complement 0
 
+ds18_search_rom_loop_1_bit_2
          movlw  b'00000000' ;first bit is 0 that is becuase different sensors have 0 or 1 at this position - we do not know how many sensors we have
          xorwf  INDF,w 
          SKPZ 
-         ;what to do in case of bit conflicts ?
-        BANKSEL ds18_received_id_bit_count
-         incf ds18_number_of_sensors_to_be_found,f 
-         
+         goto ds18_search_rom_loop_1_bit_2
          ;check if this bit was already set which means 0 was set to this one previously - now set 1
          m_find_value_position_on_stack stack_of_differences, stack_sp, ds18_received_id_bit_count, operandl
 
@@ -577,17 +589,21 @@ ds18_search_rom_loop_1_bit_next
         decfsz ds18_number_of_receive_bytes,f
         goto ds18_search_rom_loop_1_bit 
         incf  ds18_number_of_sensors,f 
+
+        goto  ds18_search_rom_OK_return
+
+        ;run another iteration
+
+
 ds18_search_rom_OK_return
          BANKSEL ds18_status
          bcf   ds18_status, ds18_receive_byte_from_lsb
-         enable_all_isr
 
         retlw 0
 
 ds18_search_rom_NOTOK_return
          BANKSEL ds18_status
          bcf   ds18_status, ds18_receive_byte_from_lsb
-         enable_all_isr
 
         retlw 1
 ;3 bytes have to be put into arguments

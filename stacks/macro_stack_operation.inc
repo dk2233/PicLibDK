@@ -56,12 +56,12 @@ sp_find_value_loop
 
      BANKSEL temp
      movf temp,w 
+     BANKSEL sp
      xorwf sp,w 
      SKPNZ 
      goto sp_find_value_not_found   
      incf temp,f
-     movf temp,w
-     addwf FSR,f 
+     incf FSR,f 
 
      goto  sp_find_value_loop
 
