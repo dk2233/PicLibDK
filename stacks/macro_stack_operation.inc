@@ -71,7 +71,7 @@ sp_find_value_loop_found
      goto  sp_find_value_loop_exit
 
 sp_find_value_not_found
-     movf STACK_VALUE_NOT_FOUND,w 
+     movlw STACK_VALUE_NOT_FOUND 
 
 sp_find_value_loop_exit
      endm
