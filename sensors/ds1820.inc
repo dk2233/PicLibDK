@@ -858,30 +858,34 @@ tab_fraction
 ; -54.9 (minus i 1000 number)
 ;this could be suitable for led segments
 ;or lcd alpahnumeric screens
-ds18_convert_dec_measurement_into_4_digits
+;this is in form of macro
+;digit1 has to be in lowest address, digit10 higher and so on
+;temp_common_l has to be in common register (available for all banks)
+ds18_convert_dec_measurement_into_4_digits_display macro digit1 , temp_common_l
     BANKSEL ds18_measured_temp
     movf   ds18_measured_temp,w 
-    movwf  number_l
-    clrf   number_h 
-
-    macro_16bits_into_N_dec  number_l, segment_digit1, 3
-    BANKSEL segment_digit1
-    movf segment_digit100,w 
-    movwf segment_digit1000
-    movf segment_digit10,w 
-    movwf segment_digit100
-    movf segment_digit1,w 
-    movwf segment_digit10
+    movwf  temp_common_l
+    clrf   temp_common_l+1
+;digit1
+;digit10 = digit1+1
+;digit100 = digit1 + 2
+;digit1000 = digit1 +3
+    macro_16bits_into_N_dec  temp_common_l, digit1, 3
+    BANKSEL digit1
+    movf digit1+2,w ;100 to 1000
+    movwf digit1+3
+    movf digit1+1,w ;10 to 100 
+    movwf digit1+2
+    movf digit1,w ; 1 to 10
+    movwf digit1+1
     movf  ds18_measured_temp_01,w 
-    movwf segment_digit1
+    movwf digit1
 
-    movlw led_minus
+    movlw minus_symbol ; here define in inc file value that will show - symbol for led - or lcd or any other display type
     btfsc ds18_status,ds18_below_zero
-    movwf segment_digit1000
+    movwf digit1+3
 
-    BANKSEL led_dot_display
-    bsf led_dot_display, light_dot10
-    return   
+    endm   
 
 ds18_receive_data_from_sensor
         BANKSEL ds18_number_of_receive_bytes
