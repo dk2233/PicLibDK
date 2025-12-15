@@ -292,8 +292,8 @@ ds18_req_scratchpad_read
          movwf    n_bit
          
          call     check_CRC_DS
-         BANKSEL ds8_CRC_result
-         movf     ds8_CRC_result,w
+         BANKSEL ds18_CRC_result
+         movf     ds18_CRC_result,w
          ;jezeli 0 to jest ok
          btfsc    STATUS,Z         
          bcf ds18_status, ds18_crc_fault
@@ -383,8 +383,8 @@ ds18_req_id_read
          movwf    n_bit
          
          call     check_CRC_DS
-         BANKSEL ds8_CRC_result
-         movf     ds8_CRC_result,w
+         BANKSEL ds18_CRC_result
+         movf     ds18_CRC_result,w
          ;jezeli 0 to jest ok
          btfsc    STATUS,Z         
          bcf ds18_status, ds18_crc_fault
@@ -479,6 +479,7 @@ ds18_search_rom_all_sensors_skip_searching
         movlw  DS18B20_id_size
         BANKSEL ds18_id_RAM_offset
         addwf  ds18_id_RAM_offset,f
+        incf  ds18_number_of_sensors,f 
 
 ds18_search_rom_all_sensors_overwrite        
         BANKSEL stack_sp
@@ -510,8 +511,6 @@ ds18_search_rom
          
          BANKSEL ds18_command_to_be_send
          movlw   DS18b20_search_rom
-         movwf   ds18_command_to_be_send
-
          call     ds18_send_request_loop_send_byte_start
 
 
@@ -633,7 +632,6 @@ ds18_search_rom_loop_1_bit_next
      
         decfsz ds18_number_of_receive_bytes,f
         goto ds18_search_rom_loop_1_bit 
-        incf  ds18_number_of_sensors,f 
 
         goto  ds18_search_rom_OK_return
 
@@ -707,9 +705,11 @@ ds18_send_request_loop_send_byte
         btfsc     ds18_command_to_be_send,0
         call      send_bit_1
         
+        BANKSEL ds18_command_to_be_send
         bcf       STATUS,C
         rrf       ds18_command_to_be_send,f
         
+        BANKSEL n_bit
         decfsz    n_bit,f
         goto      ds18_send_request_loop_send_byte
         return
@@ -890,6 +890,7 @@ ds18_convert_dec_measurement_into_4_digits_display macro digit1 , temp_common_l
 ds18_receive_data_from_sensor
         BANKSEL ds18_number_of_receive_bytes
          movf     ds18_number_of_receive_bytes,w
+         BANKSEL tmp7
          movwf    tmp7
             
         
@@ -897,6 +898,7 @@ ds18_receive_data_from_sensor
 ;normalnie jezeli ds1820 nic nie wysyla to jest caly czas 1 bez rzadnych zmian
 petla_odbioru_z_ds1820_1
         movlw     8
+        BANKSEL n_bit
         movwf     n_bit
         clrf      INDF
 
@@ -934,6 +936,7 @@ ds18_receive_one_bit
 
         wait_specific_time_no_tmr_us  mcu_freq, .50, operandl
 
+        BANKSEL n_bit
         decfsz    n_bit,f
         goto      ds18_receive_one_bit
         return 
@@ -941,40 +944,41 @@ ds18_receive_one_bit
 
 ;array with DS18b20 bytes scratchpad should be placed in FSR
 check_CRC_DS 
-         BANKSEL ds8_CRC_result
-         clrf  ds8_CRC_result
+         BANKSEL ds18_CRC_result
+         clrf  ds18_CRC_result
 check_CRC_DS_loop
          movf INDF,w   
          incf   FSR,f
-         xorwf ds8_CRC_result,f       
+         xorwf ds18_CRC_result,f       
          movlw 0     
          
-         btfsc ds8_CRC_result,0 
+         btfsc ds18_CRC_result,0 
          xorlw 0x5e       
          
-         btfsc ds8_CRC_result,1 
+         btfsc ds18_CRC_result,1 
          xorlw 0xbc 
          
-         btfsc ds8_CRC_result,2 
+         btfsc ds18_CRC_result,2 
          xorlw 0x61 
          
-         btfsc ds8_CRC_result,3 
+         btfsc ds18_CRC_result,3 
          xorlw 0xc2 
          
-         btfsc ds8_CRC_result,4 
+         btfsc ds18_CRC_result,4 
          xorlw 0x9d 
          
-         btfsc ds8_CRC_result,5 
+         btfsc ds18_CRC_result,5 
          xorlw 0x23 
          
-         btfsc ds8_CRC_result,6 
+         btfsc ds18_CRC_result,6 
          xorlw 0x46 
          
-         btfsc ds8_CRC_result,7 
+         btfsc ds18_CRC_result,7 
          xorlw 0x8c 
          
-         movwf ds8_CRC_result   
+         movwf ds18_CRC_result   
          
+         BANKSEL n_bit
          decfsz n_bit,f 
          goto check_CRC_DS_loop         
                      
