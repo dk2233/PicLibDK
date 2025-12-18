@@ -44,68 +44,10 @@
 
 
 ;also call refresh_led every couple of ms
+;if it is going on too slow you may oberve blinking
 ;
 
 
-
-;     a
-;  f |-|b
-;    g-
-;  e |_|c
-;     d
-;                  '.gfedcba'
-_0       equ      b'00111111'
-_1       equ      b'00000110' ; bc;;
-_2       equ      b'01011011';;
-_3       equ      b'01001111';;        
-_4       equ      b'01100110';bcgf;;
-_5       equ      b'01101101';acdefg;;
-_6       equ      b'01111101';        
-_7       equ      b'00000111'
-_8       equ      b'01111111'
-_9       equ      b'01101111'
-_A       equ      b'01110111';;
-_b       equ      b'01111100'
-_c       equ      b'01011000';;
-_d       equ      b'01011110'
-_e       equ      b'01111001'
-_F       equ      b'01110001'
-_p       equ      b'01110011'
-_null    equ      b'00000000'
-_U       equ      b'00111110'
-_S       equ      b'01101101'
-_minus   equ      b'01000000'
-_X       equ      b'01110110'
-_t       equ      b'01111000'
-_o       equ      b'01011100'
-_L       equ      b'00111000'
-_H      equ       b'01110110'
-_r      equ       b'01010000'
-_u      equ       b'00011100'
-_degree  equ      b'01100011'
-
-
-;number to show specific symbol
-led_minus     equ     0x14
-led_H         equ     0x19 
-led_S         equ     .19
-
-led_dot_pin   equ  7
-
-
-;led_dot_display
-light_dot1      equ  0
-light_dot10      equ  1
-light_dot100    equ  2
-light_dot1000   equ  3 
-light_dot10000   equ  4 
-
-;leds possible bits
-led1              equ      0
-led10             equ      1
-led100            equ      2
-led1000           equ      3
-led10000          equ      4
 
 tab_cyfr
          addwf    PCL,f
@@ -270,22 +212,22 @@ common_leds_start_value     equ     (1 << (LED_SEGMENT-1))
 ;for example to see 1234
 ;place   1 in segment_digit1000, 2 in segment_digit100, 3 in segment_digit10, 4 in segment_digit1
 ;for example - every 10 ms - 100Hz however for 4 digits will be 25 Hz
-refresh_led
-         BANKSEL segment_digit1
-         BANKISEL segment_digit1
+m_refresh_led macro seg_reg_L
+    LOCAL refresh_led_next, refresh_led_not_show, refresh_led_not_0, send_to_leds
+         BANKSEL seg_reg_L
          
          ;change digit to be shown - only one at a time
          bcf      STATUS,C
+         BANKSEL leds_common
          rrf      leds_common,w    ;it could be also rlf however it is easier to detect when we reach restart position - when C bit is set
          btfsc    STATUS,C
          movlw    common_leds_start_value
          movwf    leds_common
          
          ;first digit to FSR
-         movlw    segment_digit1
-         
-refresh_led1      
+         movlw    seg_reg_L
          movwf    FSR
+         BANKISEL seg_reg_L
          
          m_led_check_highest_digit LED_SEGMENT
          goto     refresh_led_next
@@ -330,13 +272,9 @@ refresh_led_not_0
 send_to_leds
          BANKSEL  value_for_one_digit_segment
          movwf    value_for_one_digit_segment
-         ;movf value_for_one_digit_segment,w 
-         ;SKPNZ 
-         ;goto send_to_leds_check_disable
 
         m_led_check_dot_display  LED_SEGMENT
 
-send_to_leds_check_disable
          btfsc    led_state,disable_show
          clrf     value_for_one_digit_segment
 
@@ -350,21 +288,11 @@ send_to_leds_check_disable
          PAGESEL translate_value_to_port_pins
          call     translate_value_to_port_pins
 
-         
-zalacz_katody     
          BANKSEL leds_common
-
          m_led_common_handle_On LED_SEGMENT
-        clrf             PCLATH         
-         return 
+         endm
          
 
-;this procedure will translate          
-;to number_l and number_h place value to be shown - max 2**16 value
-split_number_to_digits 
-        macro_16bits_into_N_dec number_l, segment_digit1 , LED_SEGMENT
-
-        return
 
 
 ;call this to intialize properly led digits procedures

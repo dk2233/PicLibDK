@@ -189,17 +189,21 @@ mem_cpy_FSR  macro sourceL, destinationL, temp_var, byte_number
 mem_cpy_FSR_loop
 	BANKISEL sourceL
 	movlw   LOW sourceL
+	BANKSEL byte_number
 	addwf   byte_number,w
 	movwf   FSR 
 	decf    FSR,f
 	movf    INDF,w 
+	BANKSEL temp_var
 	movwf   temp_var  
-	BANKISEL destinationL
 	movlw   LOW destinationL
+	BANKSEL byte_number
 	addwf   byte_number,w
 	movwf    FSR 
 	decf  FSR,f
+	BANKSEL temp_var
 	movf   temp_var,w  
+	BANKISEL destinationL
 	movwf    INDF 
 
 
