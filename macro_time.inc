@@ -12,13 +12,22 @@ option_bits = option_bits | (1 << T0CS)
 
         endif
         BANKSEL OPTION_REG
-        movlw   b'11010000'
-        andwf    OPTION_REG,w
+        movf    OPTION_REG,w
+        andlw   b'11010000'
 
         addlw   option_bits 
         movwf   OPTION_REG
         endm
 
+tmr0_interrupt_enable macro
+
+        bsf INTCON, TMR0IE
+        endm
+
+tmr0_interrupt_disable macro
+
+        bcf INTCON, TMR0IE
+        endm
 
 config_tmr1_as_timer   macro   prescaler_bit, interrupt_on 
         LOCAL bits = 1 << TMR1ON
