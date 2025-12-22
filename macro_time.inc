@@ -29,6 +29,19 @@ tmr0_interrupt_disable macro
         bcf INTCON, TMR0IE
         endm
 
+tmr1_interrupt_disable macro
+        BANKSEL PIR1
+        bcf PIR1,TMR1IF
+        BANKSEL PIE1 
+        bcf PIE1, TMR1IE
+        endm 
+
+tmr1_interrupt_enable macro
+        BANKSEL PIR1
+        bcf PIR1,TMR1IF
+        BANKSEL PIE1 
+        bsf PIE1, TMR1IE
+        endm 
 config_tmr1_as_timer   macro   prescaler_bit, interrupt_on 
         LOCAL bits = 1 << TMR1ON
 bits = bits | (prescaler_bit << T1CKPS0 )

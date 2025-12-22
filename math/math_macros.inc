@@ -197,6 +197,7 @@ shift_byte_n_times_loop
 decrement_16bit_value macro regL, dec_value 
     local decrement_16bit_value_end
     movlw dec_value
+    BANKSEL regL
     subwf regL,f
 	SKPNZ 
 	goto decrement_16bit_value_check_0_H

@@ -377,3 +377,50 @@ COPY_LOOP
     goto    COPY_LOOP
 COPY_LOOP_exit  
     endm
+
+;move bit one by one bit left and then right
+;give here condition to start and last bit 
+;reg to be rotate should be in INDF
+;reg_status to control bit to recognize that direction is changed
+move_bit_around_reg macro reg_status, bit_change_direction ,reg_start_bit, reg_last_bit
+
+	LOCAL move_bit_around_reg_restart, move_bit_around_reg_right, move_bit_around_reg_end
+ 	BANKSEL reg_status
+	movf    INDF,w
+    btfss  reg_status, bit_change_direction
+    xorlw  reg_last_bit
+
+    btfsc  reg_status, bit_change_direction
+    xorlw  reg_start_bit
+
+    SKPNZ
+    goto move_bit_around_reg_restart
+
+    bcf STATUS,C
+    btfss reg_status,bit_change_direction
+    rlf  INDF,f 
+
+    bcf STATUS,C
+    btfsc reg_status,bit_change_direction
+    rrf  INDF,f
+
+    goto move_bit_around_reg_end
+
+move_bit_around_reg_restart
+    btfsc reg_status, bit_change_direction
+    goto  move_bit_around_reg_right
+
+    bcf STATUS,C
+    rrf INDF,f 
+    BANKSEL reg_status
+    bsf  reg_status, bit_change_direction
+
+    goto move_bit_around_reg_end
+
+move_bit_around_reg_right 
+    BANKSEL reg_status
+    bcf  reg_status, bit_change_direction
+    bcf STATUS,C
+    rlf  INDF,f 
+move_bit_around_reg_end
+	endm
