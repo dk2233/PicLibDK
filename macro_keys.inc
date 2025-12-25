@@ -2,8 +2,18 @@
     #define STATE_IDLE     0
     #define STATE_DEBOUNCE 1
     #define STATE_PRESSED  2
-
-button_handler macro key_port, key_pin, button_state, button_press_flag, key_pressed_bit,  debounce_counter, debounce_time
+    #define STATE_RELEASED 3 
+    #define STATE_DEBOUNCE_RELEASED 4
+;
+;reaction on key pressed 
+;debounce time 
+;acknowledge after debounce time 
+;but also another possibility - key release + debounce release time will set that key is pressed
+;also there is a information how long key was pressed
+;  is key pressed or not
+;  time key was pressed
+button_handler macro key_port, key_pin, button_state, button_press_flag, key_pressed_bit,  debounce_counter, debounce_time, reg_pressed_countL
+;, register_after_release
     local not_first_press, button_high, not_release, button_handler_end
     ; Read button
     BANKSEL key_port
@@ -25,6 +35,13 @@ button_handler macro key_port, key_pin, button_state, button_press_flag, key_pre
     goto button_handler_end
     
 not_first_press
+    movf    button_state,w 
+    xorlw   STATE_PRESSED
+    SKPZ
+    goto not_first_press1
+    increment_16bit_value reg_pressed_countL, 1
+
+not_first_press1 
     MOVF    button_state, W
     XORLW   STATE_DEBOUNCE
     skpz
@@ -37,7 +54,7 @@ not_first_press
     ; Debounce complete - register press
     MOVLW   STATE_PRESSED
     MOVWF   button_state
-    BSF     button_press_flag, key_pressed_bit
+    ;btfsc 
     goto button_handler_end
 
 button_high
@@ -47,11 +64,13 @@ button_high
     XORLW   STATE_PRESSED
     SKPZ
     GOTO    not_release; if we never set state_pressed this means we observe debouncing
-    
     ; Was pressed, now released
     MOVLW   STATE_IDLE
     MOVWF   button_state
-    bcf button_press_flag, key_pressed_bit
+    ;if (register_after_release == 0)
+    ;bcf button_press_flag, key_pressed_bit
+    ;endif
+    BSF     button_press_flag, key_pressed_bit
     goto button_handler_end
     
 not_release

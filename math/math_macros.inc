@@ -214,3 +214,31 @@ decrement_16bit_value_check_0_H
 
 decrement_16bit_value_end    
     endm
+
+
+;increment regH:regL + inc_diff
+;remain same value if already 0xffff
+increment_16bit_value macro regL, inc_diff
+    local increment_16bit_value_end, increment_16bit_value_1
+    BANKSEL regL
+    movf  regL,w 
+    xorlw 0xff 
+    SKPZ 
+    goto increment_16bit_value_1
+
+    movf regL+1,w 
+    xorlw regL
+    SKPNZ 
+    goto increment_16bit_value_end
+
+
+increment_16bit_value_1
+    movlw inc_diff
+    addwf regL,f 
+    SKPNZ
+    incf regL+1,f 
+    SKPNC
+    incf regL+1,f
+    
+increment_16bit_value_end
+    endm

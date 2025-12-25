@@ -297,6 +297,8 @@ mem_search_data_on_array_exit
 	endm
 
 compare_two_registers_returns_minus_1  equ 0xfe 
+compare_return_equal equ  0
+compare_return_greater equ 1
 
 
 
@@ -423,4 +425,36 @@ move_bit_around_reg_right
     bcf STATUS,C
     rlf  INDF,f 
 move_bit_around_reg_end
+	endm
+
+;compare literal with reg
+;if literal > reg return -1 
+;if literal == reg return 0
+;if literal < reg return 1
+compare16bit_literal  macro literal, regL 
+	local compare16bit_literal_end, compare16bit_literalH_rehH_same
+	movf regL+1,w 
+	sublw  (literal >> .8) ; LitH - regH
+	;if Z it may be equal or greater
+	SKPNZ 
+	goto compare16bit_literalH_rehH_same 
+	SKPC
+	movlw compare_return_greater ; regH > L 
+	SKPNC ;if not C => LitH - regH 
+	movlw  compare_two_registers_returns_minus_1 ; C is set -> LitH > regH
+	goto compare16bit_literal_end 
+compare16bit_literalH_rehH_same
+	;check regL status
+	movf regL,w 
+	sublw (literal & 0xff)  ; L - regL
+	SKPZ
+	goto $+3
+	movlw compare_return_equal
+	goto compare16bit_literal_end
+	SKPC ; if C . L > regL 
+	movlw compare_return_greater ; C is set - Reg greater than Literal
+	SKPNC 
+	movlw compare_two_registers_returns_minus_1  ;Not C - Reg less than Literal
+
+compare16bit_literal_end
 	endm
