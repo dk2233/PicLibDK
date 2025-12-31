@@ -37,9 +37,21 @@ _degree  equ      b'01100011'
 
 
 ;number to show specific symbol
+led_e         equ     .14
+led_f         equ     .15
+led_p         equ     .16
+led_null      equ     .17
+led_U      equ     .18
+led_S      equ     .19
+
 led_minus     equ     0x14
+led_X     equ     0x15
+led_t     equ     0x16
+led_o     equ     0x17
+led_L     equ     0x18
 led_H         equ     0x19 
-led_S         equ     .19
+led_0         equ     0x1a 
+led_r         equ     0x1b 
 
 led_dot_pin   equ  7
 
