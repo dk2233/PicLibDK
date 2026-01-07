@@ -1,7 +1,7 @@
 ;kucharski22daniel@gmail.com  2025
 ;to use this library
 ;also use of math macros:
-;memeory_operation_16f.inc
+;memory_operation_16f.inc
 ;math_hex_to_dec_1000.inc 
 ;math_function_div.asm
 
