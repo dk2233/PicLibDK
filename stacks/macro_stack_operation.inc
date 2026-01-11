@@ -12,17 +12,23 @@ STACK_VALUE_NOT_FOUND   equ  0xff
 m_push_to_stack macro  stack_array, sp , variable_with_value
      BANKISEL stack_array
      BANKSEL sp
-
+     if (variable_with_value == 0) 
+     movwf stack_array ; stack array has one empty space just in case as temporary reg
+     endif
      incf sp,f
      movlw LOW stack_array
      addwf sp,w 
-     movwf FSR 
+     movwf FSR
+     if (variable_with_value != 0) 
      BANKSEL variable_with_value
      movf variable_with_value,w 
+     else 
+     movf stack_array,w
+     endif
      movwf INDF
      endm
 
-
+;popped value will be place in Wreg
 m_pop_stack macro stack_array, sp 
 
      BANKSEL stack_array

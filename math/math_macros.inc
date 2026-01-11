@@ -227,7 +227,7 @@ increment_16bit_value macro regL, inc_diff
     goto increment_16bit_value_1
 
     movf regL+1,w 
-    xorlw regL
+    xorlw 0xff
     SKPNZ 
     goto increment_16bit_value_end
 
