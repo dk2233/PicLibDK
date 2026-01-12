@@ -8,6 +8,8 @@
 ;key_pressed flags    
 key_pressed_bit   equ  0
 key_pressed_use   equ  1
+key_pressed_released  equ 2
+
 ;
 ;reaction on key pressed 
 ;debounce time 
@@ -15,9 +17,9 @@ key_pressed_use   equ  1
 ;but also another possibility - key release + debounce release time will set that key is pressed
 ;also there is a information how long key was pressed
 ;it is given in format of counted calls of this procedure
-; - is key pressed or not
+; - is key pressed or not - flag key_pressed_bit - set after debounce time pass after key press
 ; - time key was pressed
-; - is key released
+; - is key released - flag key_pressed_released - after debounce time
 
 
 ;
@@ -46,6 +48,7 @@ button_handler macro key_port, key_pin, button_state, button_press_flag, key_pre
     GOTO    not_first_press
     
     ; First detection - start debounce
+    clrf button_press_flag
     clrf reg_pressed_countL
     clrf reg_pressed_countL+1
     MOVLW   STATE_DEBOUNCE
@@ -109,6 +112,7 @@ button_handler_check_debounce_release2
     GOTO    button_handler_end
     bcf button_press_flag, key_pressed_bit
     bcf button_press_flag, key_pressed_use
+    bsf button_press_flag, key_pressed_released
 
 not_release
     MOVLW   STATE_IDLE
