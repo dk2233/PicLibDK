@@ -1,13 +1,5 @@
- ;;ten dokument zawiera definicje wszystkich funkcji
-;;uytych do wywietlania danych na LCD
-;;wywietlanie 8 bitowe
-
 ;def lcd
-;cay port RB0-RB7 uyty jako dane do LCD
-;init
-;to idzie na port zwizany z danymi
-
-
+;whole micro port use for LCD
 
 init_8bit	equ	b'00110000'
 set_8bit 	equ	b'00111100' ; 8bit, 2 linie,font 5x8

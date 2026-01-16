@@ -82,14 +82,22 @@ wait_specific_time_no_tmr_us  macro  mcu_freq , time_to_wait_us, reg
         LOCAL  how_many_wait_loop = .4 * .1000000 , nops_loop, how_many_cycle_one_loop = .4
 how_many_wait_loop = time_to_wait_us * mcu_freq/ how_many_wait_loop /how_many_cycle_one_loop
         BANKSEL reg
+        if (how_many_wait_loop < .256)
         movlw  how_many_wait_loop
         movwf  reg 
+        else
+        movel_2bytes how_many_wait_loop/3, reg ;reg is Lower byte 
+        endif
 
-        nop
 nops_loop        
+if (how_many_wait_loop < .256)
         ;fill (nop), .7
         nop    ; 1 cycle
         decfsz   reg,f  ; 1 cycle
+else 
+        nop  ; 1 cycle
+        decrement_16bit_value reg, .1 ;8- 11 cycles
+        SKPZ  ; 1 cycle
         goto     nops_loop ; 2 cycle
         endm
 

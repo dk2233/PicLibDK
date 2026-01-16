@@ -77,7 +77,7 @@ clear_line_old
          bcf      port_lcd_rs,rs
          
          movf     n,w
-         movwf    dane_lcd
+         movwf    lcd_data
          call     send
          movlw    ile_znakow
          movwf    tmp7
@@ -86,7 +86,7 @@ clear_line_old
 clear_line_old2
          call     check_busy
          movlw    _puste
-         movwf    dane_lcd
+         movwf    lcd_data
          call     write_lcd
          
          decfsz   tmp7,f
@@ -99,13 +99,13 @@ clear_line_old2
 clear_line
 ;przed wywolaniem do n trzeba wrzucic ilosc kasowanych znakow
 ;a w W musi byc adres linii         
-         movwf    dane_lcd
+         movwf    lcd_data
          call     send
          
 clear_line_petla
          call     check_busy
          movlw    _puste
-         movwf    dane_lcd
+         movwf    lcd_data
          call     write_lcd
          
          decfsz   n,f

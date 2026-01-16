@@ -209,10 +209,10 @@ decrement_16bit_value macro regL, dec_value
     SKPZ
     goto decrement_16bit_value_end
 decrement_16bit_value_check_0_H
-    movf regL+1,w
+    movf regL+1,w  ;8 cycles or ;10 cycles
     ;if we have 0 set STATUS,Z means we reached 0 in both reg
 
-decrement_16bit_value_end    
+decrement_16bit_value_end  ; 8 cycles  or 11 cycles
     endm
 
 
