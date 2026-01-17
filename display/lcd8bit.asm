@@ -100,7 +100,7 @@ check_busy
          clrf     port_lcd
          bsf      STATUS,RP0        ;bank 1
         movlw   b'11111111'
-         movwf    tris_lcd
+         movwf    lcd_TRIS_data
          
          bcf      STATUS,RP0
                   
@@ -117,7 +117,7 @@ check
          goto     check
          bsf      STATUS,RP0        ;bank 1
          movlw   b'00000000'
-         movwf    tris_lcd
+         movwf    lcd_TRIS_data
          bcf      STATUS,RP0
          
          bcf      port_lcd_rw,rw

@@ -195,7 +195,7 @@ shift_byte_n_times_loop
 
 ;decrement 16bit reg by dec_value 
 decrement_16bit_value macro regL, dec_value 
-    local decrement_16bit_value_end
+    local decrement_16bit_value_end, decrement_16bit_value_check_0_H
     movlw dec_value
     BANKSEL regL
     subwf regL,f

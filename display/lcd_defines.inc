@@ -10,11 +10,9 @@ display_off	equ	b'00001000' ;ustawia blinking,cursor,
 entry		equ	b'00000110' ;increment
 dd_addres_set	equ	b'10000000' ;od rb6 do rb0 wstawi�adres
 
-display_clear	equ	b'00000001'
 display_on	equ	b'00001100';bez kursora
 display_2	equ	b'00001111'
 write_4bit	equ	b'00010000' ;pisz na ekranie
-write		equ	b'01000000' ;zacz rd6 - rs
 
 disp_home	equ	b'00000010'
 

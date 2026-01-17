@@ -79,8 +79,12 @@ timer2_con |= (1 << TMR2ON)
 ;run specific number of time
 ;you need to give an register that will be used to count loop pass
 wait_specific_time_no_tmr_us  macro  mcu_freq , time_to_wait_us, reg 
-        LOCAL  how_many_wait_loop = .4 * .1000000 , nops_loop, how_many_cycle_one_loop = .4
-how_many_wait_loop = time_to_wait_us * mcu_freq/ how_many_wait_loop /how_many_cycle_one_loop
+        LOCAL  how_many_cycle_one_loop = .4
+        LOCAL  how_many_wait_loop = .4 * .1000 / how_many_cycle_one_loop , nops_loop 
+        LOCAL  freq = mcu_freq/ .1000
+
+how_many_wait_loop = time_to_wait_us * freq/ how_many_wait_loop 
+
         BANKSEL reg
         if (how_many_wait_loop < .256)
         movlw  how_many_wait_loop
@@ -97,6 +101,7 @@ if (how_many_wait_loop < .256)
 else 
         nop  ; 1 cycle
         decrement_16bit_value reg, .1 ;8- 11 cycles
+endif
         SKPZ  ; 1 cycle
         goto     nops_loop ; 2 cycle
         endm
