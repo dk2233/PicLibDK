@@ -28,7 +28,8 @@ lcd_display_off  equ lcd_cmd_display_set
 
 #define lcd_RW_operates  1 
 #define lcd_RW_grounded   0
-#define lcd_wait_time_after_cmd    .37
+#define lcd_wait_time_after_cmd    .100
+#define lcd_wait_time_after_home    .1520
 
 #define lcd_entry_inc_pos     1
 #define lcd_entry_shift_pos   0
@@ -50,6 +51,8 @@ lcd_display_off  equ lcd_cmd_display_set
 #define lcd_init_8bit	 b'00110000'
 #define display_clear	b'00000001'
 
+#define lcd_address_first_line   0
+#define lcd_address_second_line   0x40
 ;send data to lcd 
 m_lcd_send_data macro lcd_data_to_be_send
 ;np PORTA bity 0-3  sa uzywane przez 4 bitowy ekran lcd
@@ -158,9 +161,9 @@ m_clear_line_loop
 
          
 m_check_busy macro  tmp_lcd
+      clear_port_lcd
 if (lcd_RW_operates == lcd_RW_usage)
       local m_check_loop 
-      clear_port_lcd
          banksel lcd_TRIS_data         
          movf     lcd_TRIS_data,w
          addlw    lcd_tris_check_busy_mask
@@ -233,6 +236,9 @@ m_clear_display macro
 m_return_home  macro 
    movlw lcd_cmd_return_home
     call  func_name_send_data
+if (lcd_RW_operates == lcd_RW_grounded)
+   wait_specific_time_no_tmr_us mcu_freq, lcd_wait_time_after_home, tmp_lcd
+endif
    endm
 
 m_lcd_set_address_ddram  macro 
@@ -284,7 +290,7 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
             ERROR "no lcd_data location defined"
          endif
       endif 
-         #define lcd_RW_usage  lcd_RW_operates
+         #define lcd_RW_usage  is_RW_used
 
       wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
       wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
