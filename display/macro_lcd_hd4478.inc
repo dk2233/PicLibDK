@@ -55,36 +55,44 @@ m_lcd_send_data macro lcd_data_to_be_send
 ;np PORTA bity 0-3  sa uzywane przez 4 bitowy ekran lcd
 ;najpierw wysylane sa 4bity gorne
    if (lcd_data_8bit == 1)
+      banksel lcd_port_data
       movwf lcd_port_data
       clear_port_lcd
    else         
+      banksel lcd_data_to_be_send
       movwf  lcd_data_to_be_send
       clear_port_lcd
+       banksel lcd_data_to_be_send
     IF (lcd_location_4_bit_in_H == 0) 
 ;jezli linia LCD jest na dolnych bitach portu przypisanego do LCD, wtedy to co jest
 ;wysylane musi byc najpierw starsze wyslane, wiec to co jest w rejestrze lcd_data musi byc obrocone tak by starsze bity znalazly sie na miejscy mlodszych (dolnych)
        swapf   lcd_data_to_be_send,w
        andlw  0x0f ; clear in higher nibble
+       banksel lcd_port_data
 		 addwf	lcd_port_data,f ;clear current lcd data in port 
     elif  (lcd_location_4_bit_in_H == 1)        
       movf   lcd_data_to_be_send,w 
       andlw  0xf0
+       banksel lcd_port_data
 		addwf	lcd_port_data,f 
     ENDIF
          
        m_trigger_enable
 
        clear_port_lcd
+       banksel  lcd_data_to_be_send
   IF (lcd_location_4_bit_in_H == 0) 
 ;jezli linia LCD jest na dolnych bitach portu przypisanego do LCD, wtedy to co jest
 ;wysylane musi byc najpierw starsze wyslane, wiec to co jest w rejestrze lcd_data musi byc obrocone tak by starsze bity znalazly sie na miejscy mlodszych (dolnych)
     	 movf	 lcd_data_to_be_send,w
        andlw  0x0f
+       banksel lcd_port_data
 		 addwf	 lcd_port_data,f 
   elif (lcd_location_4_bit_in_H == 1)        
 ;jesli linia LCD jest podlaczona do gornych linii portu LCD nie na razie nie obracam            
        swapf   lcd_data_to_be_send,w
        andlw  0xf0 ; clear in higher nibble
+       banksel lcd_port_data
 		 addwf	lcd_port_data,f ;clear current lcd data in port 
    ENDIF
 
@@ -93,6 +101,7 @@ m_lcd_send_data macro lcd_data_to_be_send
       endm
 
 m_trigger_enable macro  
+      banksel port_lcd_e
       bsf      port_lcd_e,lcd_enable_pin
       nop
       nop
@@ -109,14 +118,17 @@ m_trigger_enable_with_check  macro tmp_lcd
          
 ;funkcja pisz?ca na ekranie
 m_write_lcd  macro  lcd_data_to_be_send
+         banksel   port_lcd_rs
          bsf      port_lcd_rs,lcd_RS_pin         
          m_lcd_send_data  lcd_data_to_be_send
+         banksel   port_lcd_rs
          bcf      port_lcd_rs,lcd_RS_pin
          endm
 
 ;funkcja czyszcz?ca ekran
 
 m_cmd_off macro 
+      banksel port_lcd_rs
       bcf      port_lcd_rs,lcd_RS_pin
       endm
          
@@ -126,14 +138,17 @@ m_cmd_off macro
 ;place address into Wreg
 m_clear_line macro    lcd_data, n_letters
    local m_clear_line_loop
+       banksel  lcd_data
       movwf    lcd_data
       call     func_name_send_data
       
 m_clear_line_loop
       movlw    lcd_space
+      banksel lcd_data
       movwf    lcd_data
       call     func_write_data
       
+      banksel  n_letters
       decfsz   n_letters,f
       goto     clear_line_loop
       
@@ -271,10 +286,14 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
       endif 
          #define lcd_RW_usage  lcd_RW_operates
 
-      wait_specific_time_no_tmr_us   mcu_freq, .41000, lcd_tmp_regL ; wait for more than 40 ms
+      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
+      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
+      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
+      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
          clear_port_lcd
       if (is_8_bit == 1)
          movlw   lcd_init_8bit ; 8 bit data transfer - whole one port use for DB0-DB7 data 
+         banksel  lcd_port_data
 	      movwf	  lcd_port_data
 
       else 
@@ -284,44 +303,35 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
       ;wysylane musi byc najpierw starsze wyslane, wiec to co jest w rejestrze lcd_data musi byc obrocone tak by starsze bity znalazly sie na miejscy mlodszych (dolnych)
             movlw (lcd_init_8bit >> 4)
             andlw  0x0f ; clear in higher nibble
+         banksel  lcd_port_data
             addwf	lcd_port_data,f ;clear current lcd data in port 
          elif  (lcd_location_4_bit_in_H == 1)        
             movlw lcd_init_8bit
             andlw  0xf0
+         banksel  lcd_port_data
             addwf	lcd_port_data,f 
          ENDIF
    endif
 
-   m_trigger_enable 
-   wait_specific_time_no_tmr_us mcu_freq, .4200, lcd_tmp_regL     
-         
-         
-   m_trigger_enable 
-         
-   wait_specific_time_no_tmr_us mcu_freq, .100, lcd_tmp_regL     
-
-   m_trigger_enable 
 
     clear_port_lcd
    if (is_8_bit == 1)
-      movlw func_set_value
-      movwf	  lcd_port_data
-      m_trigger_enable_with_check lcd_tmp_regL
+        movlw   func_set_value
+        call     func_name_send_data
    else 
    if (lcd_location_4_bit_in_H == 0) 
 ;jezli linia LCD jest na dolnych bitach portu przypisanego do LCD, wtedy to co jest
 ;wysylane musi byc najpierw starsze wyslane, wiec to co jest w rejestrze lcd_data musi byc obrocone tak by starsze bity znalazly sie na miejscy mlodszych (dolnych)
       movlw    (func_set_value >> 4)
+         banksel  lcd_port_data
       addwf    lcd_port_data,f 
    elif (lcd_location_4_bit_in_H == 1)        
       movlw    func_set_value 
+         banksel  lcd_port_data
       addwf   lcd_port_data,f
    endif
    m_trigger_enable_with_check lcd_tmp_regL
    ENDIF
-         
-        ;movlw   func_set_value
-        ;call     func_name_send_data
          
         movlw    lcd_display_off
         call     func_name_send_data

@@ -45,17 +45,15 @@ how_many_wait_loop = time_to_wait_us * freq/ how_many_wait_loop
         movlw  how_many_wait_loop
         movwf  reg 
         else
-        movel_2bytes how_many_wait_loop/3, reg ;reg is Lower byte 
+        movel_2bytes how_many_wait_loop/4, reg ;reg is Lower byte  - 1/4 due to fact that 16 cycles are used
         endif
 
 nops_loop        
 if (how_many_wait_loop < .256)
-        ;fill (nop), .7
-        nop    ; 1 cycle
         decfsz   reg,f  ; 1 cycle
 else 
-        nop  ; 1 cycle
-        decrement_16bit_value reg, .1 ;8- 11 cycles
+        fill (nop), .3
+        decrement_16bit_value reg, .1 ;10 cycles
 endif
         SKPZ  ; 1 cycle
         goto     nops_loop ; 2 cycle

@@ -2,7 +2,7 @@
     include ../../PicLibDK/memory_operation_16f.inc
     include ../../PicLibDK/math/math_macros.inc
     include ../../PicLibDK/stacks/macro_stack_operation.inc
-    include ../../PicLibDK/macro_time.inc
+    include ../../PicLibDK/macro_time_common.inc
     include ../../PicLibDK/interrupts.inc
 ds18_udata udata
 

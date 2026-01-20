@@ -194,25 +194,21 @@ shift_byte_n_times_loop
     endm
 
 ;decrement 16bit reg by dec_value 
+;9 or 10 cycles
 decrement_16bit_value macro regL, dec_value 
-    local decrement_16bit_value_end, decrement_16bit_value_check_0_H
-    movlw dec_value
-    BANKSEL regL
-    subwf regL,f
-	SKPNZ 
-	goto decrement_16bit_value_check_0_H
-    SKPNC ;NC means overwflow
+    local decrement_16bit_value_end
+    movlw dec_value ; 1
+    BANKSEL regL  ; 2 
+    subwf regL,f  ; 1  (4)
+    SKPZ ;if 0 here check if H reg is already 0 - finish  
+    goto $+4
+    movf regL+1,w 
+    SKPNZ 
     goto decrement_16bit_value_end
-    decf regL+1,f   
-    ;check if both reg are 0
-    movf regL,w 
-    SKPZ
-    goto decrement_16bit_value_end
-decrement_16bit_value_check_0_H
-    movf regL+1,w  ;8 cycles or ;10 cycles
-    ;if we have 0 set STATUS,Z means we reached 0 in both reg
-
-decrement_16bit_value_end  ; 8 cycles  or 11 cycles
+    SKPNC ;NC means overflow - so we reach 0xff
+    goto decrement_16bit_value_end; 10, 
+    decf regL+1,f   ;9
+decrement_16bit_value_end  ;  always  16 cycles 
     endm
 
 
