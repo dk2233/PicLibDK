@@ -49,6 +49,7 @@ lcd_display_off  equ lcd_cmd_display_set
 #define lcd_display_blink_pos   .0
 
 #define lcd_init_8bit	 b'00110000'
+#define lcd_init_4bit	 b'00100000'
 #define display_clear	b'00000001'
 
 #define lcd_address_first_line   0
@@ -254,13 +255,9 @@ clear_port_lcd  macro
    if (lcd_location_4_bit_in_H == 0) 
       movlw   0xf0 
       andwf lcd_port_data,f 
-      movlw    (func_set_value >> 4)
-      iorwf    lcd_port_data,f 
    elif (lcd_location_4_bit_in_H == 1)        
       movlw   0x0f 
       andwf lcd_port_data,f 
-      movlw    func_set_value 
-      iorwf   lcd_port_data,f
    endif
    endif
 
@@ -276,10 +273,12 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
 
       if (is_8_bit == 1)
          #define lcd_data_8bit  1
+         #define lcd_data_4bit 0
          #define lcd_tris_normal_state_mask  0x0 ;and this value with tris
          #define lcd_tris_check_busy_mask    0xff  ;add this value to tris
       else 
          #define lcd_data_4bit 1
+         #define lcd_data_8bit  0 
          if (lcd_location_4_bit_in_H == 1)
             #define lcd_tris_normal_state_mask  0x0f ;add + with tris this value and as a result normal tris for lcd is set
             #define lcd_tris_check_busy_mask    0xf0 ;and & this value to tris 
@@ -294,8 +293,6 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
 
       wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
       wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
-      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
-      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
          clear_port_lcd
       if (is_8_bit == 1)
          movlw   lcd_init_8bit ; 8 bit data transfer - whole one port use for DB0-DB7 data 
@@ -307,18 +304,20 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
          IF (lcd_location_4_bit_in_H == 0) 
       ;jezli linia LCD jest na dolnych bitach portu przypisanego do LCD, wtedy to co jest
       ;wysylane musi byc najpierw starsze wyslane, wiec to co jest w rejestrze lcd_data musi byc obrocone tak by starsze bity znalazly sie na miejscy mlodszych (dolnych)
-            movlw (lcd_init_8bit >> 4)
+            movlw (lcd_init_4bit >> 4)
             andlw  0x0f ; clear in higher nibble
          banksel  lcd_port_data
             addwf	lcd_port_data,f ;clear current lcd data in port 
          elif  (lcd_location_4_bit_in_H == 1)        
-            movlw lcd_init_8bit
+            movlw lcd_init_4bit
             andlw  0xf0
          banksel  lcd_port_data
             addwf	lcd_port_data,f 
          ENDIF
    endif
 
+      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
+      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
 
     clear_port_lcd
    if (is_8_bit == 1)
@@ -328,15 +327,19 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
    if (lcd_location_4_bit_in_H == 0) 
 ;jezli linia LCD jest na dolnych bitach portu przypisanego do LCD, wtedy to co jest
 ;wysylane musi byc najpierw starsze wyslane, wiec to co jest w rejestrze lcd_data musi byc obrocone tak by starsze bity znalazly sie na miejscy mlodszych (dolnych)
-      movlw    (func_set_value >> 4)
-         banksel  lcd_port_data
+      movlw    lcd_init_4bit 
+      banksel  lcd_port_data
       addwf    lcd_port_data,f 
+      m_trigger_enable
    elif (lcd_location_4_bit_in_H == 1)        
-      movlw    func_set_value 
-         banksel  lcd_port_data
+      movlw    ((0x0f & lcd_init_4bit) << 4) 
+      banksel  lcd_port_data
       addwf   lcd_port_data,f
+      m_trigger_enable
    endif
-   m_trigger_enable_with_check lcd_tmp_regL
+
+        movlw   func_set_value
+        call     func_name_send_data
    ENDIF
          
         movlw    lcd_display_off
