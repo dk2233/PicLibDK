@@ -290,9 +290,7 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
          endif
       endif 
          #define lcd_RW_usage  is_RW_used
-
-      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
-      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
+         
          clear_port_lcd
       if (is_8_bit == 1)
          movlw   lcd_init_8bit ; 8 bit data transfer - whole one port use for DB0-DB7 data 
@@ -308,39 +306,23 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
             andlw  0x0f ; clear in higher nibble
          banksel  lcd_port_data
             addwf	lcd_port_data,f ;clear current lcd data in port 
+            m_trigger_enable
          elif  (lcd_location_4_bit_in_H == 1)        
             movlw lcd_init_4bit
             andlw  0xf0
          banksel  lcd_port_data
             addwf	lcd_port_data,f 
+            m_trigger_enable
          ENDIF
    endif
 
       wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
       wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
-
-    clear_port_lcd
-   if (is_8_bit == 1)
-        movlw   func_set_value
-        call     func_name_send_data
-   else 
-   if (lcd_location_4_bit_in_H == 0) 
-;jezli linia LCD jest na dolnych bitach portu przypisanego do LCD, wtedy to co jest
-;wysylane musi byc najpierw starsze wyslane, wiec to co jest w rejestrze lcd_data musi byc obrocone tak by starsze bity znalazly sie na miejscy mlodszych (dolnych)
-      movlw    lcd_init_4bit 
-      banksel  lcd_port_data
-      addwf    lcd_port_data,f 
-      m_trigger_enable
-   elif (lcd_location_4_bit_in_H == 1)        
-      movlw    ((0x0f & lcd_init_4bit) << 4) 
-      banksel  lcd_port_data
-      addwf   lcd_port_data,f
-      m_trigger_enable
-   endif
+      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
+      wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
 
         movlw   func_set_value
         call     func_name_send_data
-   ENDIF
          
         movlw    lcd_display_off
         call     func_name_send_data
