@@ -19,8 +19,8 @@ lcd_cmd_return_home    equ  b'00000010'
 #define lcd_cmd_set_entry   b'00000100'
 lcd_cmd_display_set  equ    b'00001000'
 lcd_cmd_function_set   equ  b'00100000'
-lcd_cmd_cgram_set   equ     b'01000000'
-lcd_cmd_address_set   equ   b'10000000'
+lcd_cmd_CGRAM_address_set   equ   b'01000000'
+lcd_cmd_DDRAM_address_set   equ   b'10000000'
 lcd_display_off  equ lcd_cmd_display_set
 #define lcd_cmd_8_bit_pos  .4
 #define lcd_cmd_NL_pos     .3
@@ -54,6 +54,23 @@ lcd_display_off  equ lcd_cmd_display_set
 
 #define lcd_address_first_line   0
 #define lcd_address_second_line   0x40
+
+
+#define lcd_sprite_heart   dt   0, B'01010' ,  B'11111',   B'11111',  B'01110',  B'00100',   B'00000',   B'00000'
+
+#define lcd_sprite_smiley  dt   0, b'01010', b'01010', b'00000', b'10001', b'01110', 0, 0
+
+#define lcd_sprite_body    dt   b'00100', b'11011',  b'00100',  b'01010',  b'01010', b'01010', b'11011', 0
+
+#define lcd_sprite_body2    dt  b'00100', b'11011',  b'00100',  b'00100',  b'01010', b'01010', b'11011', 0
+
+#define lcd_sprite_body3    dt  b'01110', b'01110', b'00100', b'11111',  b'00100',    b'01010', b'11011', 0
+
+#define lcd_sprite_bell  dt 0, B'00100',  B'01110',   B'01110',  B'01110',    B'11111',    B'00000',       B'00100'
+
+#define lcd_sprite_rock  dt b'01110', b'01010', b'10011', b'10001', b'10101', b'01010', b'01110', 0
+
+
 ;send data to lcd 
 m_lcd_send_data macro lcd_data_to_be_send
 ;np PORTA bity 0-3  sa uzywane przez 4 bitowy ekran lcd
@@ -120,7 +137,7 @@ m_trigger_enable_with_check  macro tmp_lcd
 
    endm 
          
-;funkcja pisz?ca na ekranie
+;place data to be send into WREG
 m_write_lcd  macro  lcd_data_to_be_send
          banksel   port_lcd_rs
          bsf      port_lcd_rs,lcd_RS_pin         
@@ -243,10 +260,14 @@ endif
    endm
 
 m_lcd_set_address_ddram  macro 
-   addlw lcd_cmd_address_set
+   addlw lcd_cmd_DDRAM_address_set
    call func_name_send_data
    endm 
 
+m_lcd_set_address_cgram  macro 
+   addlw lcd_cmd_CGRAM_address_set
+   call func_name_send_data
+   endm 
 
 clear_port_lcd  macro 
       BANKSEL lcd_port_data
