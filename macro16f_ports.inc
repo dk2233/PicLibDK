@@ -21,3 +21,10 @@ enable_pull_up  macro value_for_wpub
         movlw value_for_wpub
         movwf WPUB
         endm
+
+configure_tris_16f macro tris_reg , tris_state
+
+        banksel tris_reg 
+        movlw tris_state
+        movwf tris_reg
+        endm 

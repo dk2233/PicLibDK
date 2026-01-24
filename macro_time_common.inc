@@ -34,17 +34,28 @@ tmr0_interrupt_disable macro
 ;run specific number of time
 ;you need to give an register that will be used to count loop pass
 wait_specific_time_no_tmr_us  macro  mcu_freq , time_to_wait_us, reg 
-        LOCAL  how_many_wait_loop = .4 * .1000000 , nops_loop, how_many_cycle_one_loop = .4
-how_many_wait_loop = time_to_wait_us * mcu_freq/ how_many_wait_loop /how_many_cycle_one_loop
+        LOCAL  how_many_cycle_one_loop = .4
+        LOCAL  how_many_wait_loop = .4 * .1000 / how_many_cycle_one_loop , nops_loop 
+        LOCAL  freq = mcu_freq/ .1000
+
+how_many_wait_loop = time_to_wait_us * freq/ how_many_wait_loop 
+
         BANKSEL reg
+        if (how_many_wait_loop < .256)
         movlw  how_many_wait_loop
         movwf  reg 
+        else
+        movel_2bytes how_many_wait_loop/4, reg ;reg is Lower byte  - 1/4 due to fact that 16 cycles are used
+        endif
 
-        nop
 nops_loop        
-        ;fill (nop), .7
-        nop    ; 1 cycle
+if (how_many_wait_loop < .256)
         decfsz   reg,f  ; 1 cycle
+else 
+        fill (nop), .3
+        decrement_16bit_value reg, .1 ;10 cycles
+endif
+        SKPZ  ; 1 cycle
         goto     nops_loop ; 2 cycle
         endm
 
