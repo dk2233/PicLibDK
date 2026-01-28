@@ -158,12 +158,14 @@ init_ds1820
          nop
 ;sprawdzam czy w ciagu 480us pojawilo sie 0 na porcie czujnika 
         calculate_loop_number_to_reach_period_us  mcu_freq, .480, .4
+        banksel ds18_tmp
         movwf ds18_tmp
         BANKSEL port_ds18b20
 init_ds1820_loop_wait_for_ds_out        
          btfss    port_ds18b20,port_pin_ds18b20 ;1
          goto     petla_inicjacji3
-        
+         
+         banksel ds18_tmp
          decfsz  ds18_tmp,f   ;1
          goto     init_ds1820_loop_wait_for_ds_out ;2
 

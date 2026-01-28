@@ -1,4 +1,3 @@
-
 configure_ports_16f  macro  port_reg, tris_state 
         BANKSEL  port_reg
         clrf     port_reg

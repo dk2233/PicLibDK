@@ -7,16 +7,6 @@
 
 
 
-configure_ports_16f  macro  port_reg, tris_state 
-        BANKSEL  port_reg
-        clrf     port_reg
-        ;change to bank1 to change tris for specific port 
-        bsf      STATUS,RP0
-
-        movlw    tris_state
-        movwf    port_reg
-        endm
-
 
 config_lcd_off  macro 
    
