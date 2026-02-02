@@ -6,6 +6,9 @@
     #define STATE_DEBOUNCE_RELEASED 4
 
 ;key_pressed flags    
+;BEST is not use them directly !
+;instead just use them to indicate other bits and 
+;ASAP unset
 key_pressed_bit   equ  0
 key_pressed_use   equ  1
 key_pressed_released  equ 2
