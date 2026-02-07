@@ -394,6 +394,7 @@ convert_temperature_positive
         movwf  PCLATH
         BANKSEL ds18_measured_temp
         movf ds18_measured_temp_01,w 
+        PAGESEL tab_fraction
         ;calculation of fraction requires knowledge of current bit precision
         ;12 bit , 11 bit, 10 bit, 9 bit
         ;that gives following precision
@@ -434,11 +435,17 @@ ds18_convert_dec_measurement_into_4_digits_display macro digit1 , temp_common_l
     movwf digit1+2
     movf digit1,w ; 1 to 10
     movwf digit1+1
-    movf  ds18_measured_temp_01,w 
+    banksel ds18_measured_temp_01
+    movf  ds18_measured_temp_01,w
+    banksel digit1 
     movwf digit1
 
     movlw minus_symbol ; here define in inc file value that will show - symbol for led - or lcd or any other display type
-    btfsc ds18_status,ds18_below_zero
+    banksel ds18_status
+    pagesel $
+    btfss ds18_status,ds18_below_zero
+    goto $+4
+    banksel digit1
     movwf digit1+3
 
     endm   

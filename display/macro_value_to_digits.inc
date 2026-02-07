@@ -59,6 +59,7 @@ x = x - 1
     move_2bytes_into_2bytes  valueL, result_ll
     clrf  result_hl
     movel_2bytes  first_divider, operandl
+    pagesel func_div_24bit_16bit
     call func_div_24bit_16bit
     movf    result_ll,W
     BANKSEL digit1
@@ -69,6 +70,7 @@ divider = divider / .10
     move_2bytes_into_2bytes fraction_l, result_ll 
     clrf result_hl
     movel_2bytes  divider, operandl 
+    pagesel func_div_24bit_16bit
     call func_div_24bit_16bit 
     movf result_ll,w 
     BANKSEL digit1
