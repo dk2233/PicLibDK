@@ -4,7 +4,8 @@
 ;data port is fully used by one of micro ports = wether is 8 bit or 4 bit
 ;in case of 4 bits - whole nibble will be occupied by data (lower or higher)
 
-
+;func_name_send_data  - this is symbol that needs to be defined before using this file
+;usually it will be some label (procedure)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                           
 
 lcd_set_8_bit    equ  1
@@ -287,7 +288,7 @@ clear_port_lcd  macro
 
 
 m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, display_shift, cursor_view, blink_config, is_RW_used, lcd_tmp_regL
-   local func_set_value = lcd_cmd_function_set | (is_8_bit << lcd_cmd_8_bit_pos ) | (1 << lcd_cmd_NL_pos ) | (1 << lcd_cmd_fonts_size_pos)
+   local func_set_value = lcd_cmd_function_set | (is_8_bit << lcd_cmd_8_bit_pos ) | (number_of_lines << lcd_cmd_NL_pos ) | (character_fonts << lcd_cmd_fonts_size_pos)
    local set_entry_value = lcd_cmd_set_entry | (set_increment << lcd_entry_inc_pos) | (display_shift << lcd_entry_shift_pos) 
    local display_set_value = lcd_cmd_display_set | (1 << lcd_display_on_pos) | (cursor_view << lcd_display_cursor_pos) | (blink_config << lcd_display_blink_pos)
    m_cmd_off
@@ -327,14 +328,13 @@ m_lcd_init macro  is_8_bit, number_of_lines, character_fonts, set_increment, dis
             andlw  0x0f ; clear in higher nibble
          banksel  lcd_port_data
             addwf	lcd_port_data,f ;clear current lcd data in port 
-            m_trigger_enable
          elif  (lcd_location_4_bit_in_H == 1)        
             movlw lcd_init_4bit
             andlw  0xf0
          banksel  lcd_port_data
             addwf	lcd_port_data,f 
-            m_trigger_enable
          ENDIF
+            m_trigger_enable
    endif
 
       wait_specific_time_no_tmr_us   mcu_freq, .11000, lcd_tmp_regL ; wait for more than 10 ms
